@@ -460,6 +460,14 @@ class AzurLaneAutoScript:
             if self.config.task.command != 'Alas':
                 release_resources(next_task=task.command)
 
+            # Reboot emulator
+            if self.emulator_stopped:
+                self.device.emulator_start()
+                if not task == 'Restart':
+                    self.run('start')
+                self.emulator_stopped = False
+                del_cached_property(self, 'config')
+                
             if task.next_run > datetime.now():
                 logger.info(f'Wait until {task.next_run} for task `{task.command}`')
                 self.is_first_task = False
@@ -506,13 +514,6 @@ class AzurLaneAutoScript:
                         del_cached_property(self, 'config')
                         continue
 
-            # Reboot emulator
-            if self.emulator_stopped:
-                self.device.emulator_start()
-                if not task == 'Restart':
-                    self.run('start')
-                self.emulator_stopped = False
-                del_cached_property(self, 'config')
             break
 
         AzurLaneConfig.is_hoarding_task = False
@@ -543,6 +544,13 @@ class AzurLaneAutoScript:
             _ = self.device
             # Get task
             task = self.get_next_task()
+            # Reboot emulator
+            if self.emulator_stopped:
+                self.device.emulator_start()
+                if not task == 'Restart':
+                    self.run('start')
+                self.emulator_stopped = False
+                del_cached_property(self, 'config')
             # Skip first restart
             if self.is_first_task and task == 'Restart':
                 logger.info('Skip task `Restart` at scheduler start')

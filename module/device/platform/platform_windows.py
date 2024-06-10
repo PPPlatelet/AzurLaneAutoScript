@@ -103,7 +103,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 continue
             if set(win32gui.GetWindowRect(hwnd)) == {0}:
                 continue
-            self._switch_window(hwnd, arg)# May arg will be sent in.
+            self._switch_window(hwnd, arg)
 
     def _emulator_start(self, instance: EmulatorInstance):
         """
@@ -144,7 +144,6 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         Stop a emulator without error handling
         """
         import os
-        logger.hr('Emulator stop', level=2)
         exe: str = instance.emulator.path
         if instance == Emulator.MuMuPlayer:
             # MuMu6 does not have multi instance, kill one means kill all
