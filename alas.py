@@ -468,51 +468,53 @@ class AzurLaneAutoScript:
                 self.emulator_stopped = False
                 del_cached_property(self, 'config')
                 
-            if task.next_run > datetime.now():
-                logger.info(f'Wait until {task.next_run} for task `{task.command}`')
-                self.is_first_task = False
-                method = self.config.Optimization_WhenTaskQueueEmpty
-                if method == 'close_game':
-                    logger.info('Close game during wait')
-                    self.device.app_stop()
-                    release_resources()
-                    self.device.release_during_wait()
-                    if not self.wait_until(task.next_run):
-                        del_cached_property(self, 'config')
-                        continue
-                    if task.command != 'Restart':
-                        self.run('start')
-                elif method == 'goto_main':
-                    logger.info('Goto main page during wait')
-                    self.run('goto_main')
-                    release_resources()
-                    self.device.release_during_wait()
-                    if not self.wait_until(task.next_run):
-                        del_cached_property(self, 'config')
-                        continue
-                elif method == 'stay_there':
-                    logger.info('Stay there during wait')
-                    release_resources()
-                    self.device.release_during_wait()
-                    if not self.wait_until(task.next_run):
-                        del_cached_property(self, 'config')
-                        continue
-                elif method == 'stop_emulator':
-                    logger.info('Stop emulator during wait')
-                    self.device.emulator_stop()
-                    self.emulator_stopped = True
-                    release_resources() 
-                    self.device.release_during_wait()
-                    if not self.wait_until(task.next_run):
-                        del_cached_property(self, 'config')
-                        continue
-                else:
-                    logger.warning(f'Invalid Optimization_WhenTaskQueueEmpty: {method}, fallback to stay_there')
-                    release_resources()
-                    self.device.release_during_wait()
-                    if not self.wait_until(task.next_run):
-                        del_cached_property(self, 'config')
-                        continue
+            if task.next_run <= datetime.now():
+                break
+            
+            logger.info(f'Wait until {task.next_run} for task `{task.command}`')
+            self.is_first_task = False
+            method = self.config.Optimization_WhenTaskQueueEmpty
+            if method == 'close_game':
+                logger.info('Close game during wait')
+                self.device.app_stop()
+                release_resources()
+                self.device.release_during_wait()
+                if not self.wait_until(task.next_run):
+                    del_cached_property(self, 'config')
+                    continue
+                if task.command != 'Restart':
+                    self.run('start')
+            elif method == 'goto_main':
+                logger.info('Goto main page during wait')
+                self.run('goto_main')
+                release_resources()
+                self.device.release_during_wait()
+                if not self.wait_until(task.next_run):
+                    del_cached_property(self, 'config')
+                    continue
+            elif method == 'stay_there':
+                logger.info('Stay there during wait')
+                release_resources()
+                self.device.release_during_wait()
+                if not self.wait_until(task.next_run):
+                    del_cached_property(self, 'config')
+                    continue
+            elif method == 'stop_emulator':
+                logger.info('Stop emulator during wait')
+                self.device.emulator_stop()
+                self.emulator_stopped = True
+                release_resources() 
+                self.device.release_during_wait()
+                if not self.wait_until(task.next_run):
+                    del_cached_property(self, 'config')
+                    continue
+            else:
+                logger.warning(f'Invalid Optimization_WhenTaskQueueEmpty: {method}, fallback to stay_there')
+                release_resources()
+                self.device.release_during_wait()
+                if not self.wait_until(task.next_run):
+                    del_cached_property(self, 'config')
+                    continue
 
             break
 
