@@ -26,7 +26,6 @@ class AzurLaneAutoScript:
         # Failure count of tasks
         # Key: str, task name, value: int, failure count
         self.failure_record = {}
-        self.emulator_stopped = False
 
     @cached_property
     def config(self):
@@ -73,11 +72,6 @@ class AzurLaneAutoScript:
         except GameNotRunningError as e:
             logger.warning(e)
             self.config.task_call('Restart')
-            return True
-        except EmulatorNotRunningError as e:
-            logger.warning(e)
-            self.device.emulator_start()
-            self.run('start')
             return True
         except (GameStuckError, GameTooManyClickError) as e:
             logger.error(e)
@@ -461,12 +455,13 @@ class AzurLaneAutoScript:
                 release_resources(next_task=task.command)
 
             # Reboot emulator
-            if self.emulator_stopped:
+            if not self.device.emulator_check() and task.next_run <= datetime.now():
+                logger.warning('Emulator is not running')
                 self.device.emulator_start()
                 if not task == 'Restart':
                     self.run('start')
-                self.emulator_stopped = False
                 del_cached_property(self, 'config')
+                break
                 
             if task.next_run <= datetime.now():
                 break
@@ -502,7 +497,6 @@ class AzurLaneAutoScript:
             elif method == 'stop_emulator':
                 logger.info('Stop emulator during wait')
                 self.device.emulator_stop()
-                self.emulator_stopped = True
                 release_resources() 
                 self.device.release_during_wait()
                 if not self.wait_until(task.next_run):
@@ -547,11 +541,11 @@ class AzurLaneAutoScript:
             # Get task
             task = self.get_next_task()
             # Reboot emulator
-            if self.emulator_stopped:
+            if not self.device.emulator_check():
+                logger.warning('Emulator is not running')
                 self.device.emulator_start()
                 if not task == 'Restart':
                     self.run('start')
-                self.emulator_stopped = False
                 del_cached_property(self, 'config')
             # Skip first restart
             if self.is_first_task and task == 'Restart':

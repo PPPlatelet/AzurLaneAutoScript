@@ -1,7 +1,5 @@
+import ctypes
 import re
-import win32process
-import win32con
-import win32gui
 
 import psutil
 
@@ -11,6 +9,7 @@ from module.base.timer import Timer
 from module.device.connection import AdbDeviceWithStatus
 from module.device.platform.platform_base import PlatformBase
 from module.device.platform.emulator_windows import Emulator, EmulatorInstance, EmulatorManager
+from module.device.platform import winapi
 from module.logger import logger
 
 
@@ -18,15 +17,13 @@ class EmulatorUnknown(Exception):
     pass
 
 
-class HwndNotFoundError(Exception):
-    pass
-
-
 class PlatformWindows(PlatformBase, EmulatorManager):
     def __init__(self, config):
         super().__init__(config)
         self.process: tuple = None
+        self.proc: psutil.Process = None
         self.hwnds: list[int] = None
+        self.focusedwindow: int = None
 
     def execute(self, command: str):
         """
@@ -34,21 +31,11 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             command (str):
 
         Returns:
-            win32process.CreateProcess -> tuple(Incomplete, Incomplete, int, int):
+            bool:
         """
         command = command.replace(r"\\", "/").replace("\\", "/").replace('"', '"')
         logger.info(f'Execute: {command}')
-        startupinfo = win32process.STARTUPINFO()
-        startupinfo.dwFlags = win32con.STARTF_USESHOWWINDOW
-        if self.config.Emulator_SilentStart:
-            startupinfo.wShowWindow = win32con.SW_HIDE
-        else: 
-            startupinfo.wShowWindow = win32con.SW_MINIMIZE
-        self.process = win32process.CreateProcess( #Only work for Windows.
-            None,command,None,None,False,
-            win32con.DETACHED_PROCESS,
-            None,None,startupinfo
-        )
+        self.process, self.focusedwindow = winapi.execute(command, self.config.Emulator_SilentStart)
         return True
 
     @classmethod
@@ -73,35 +60,30 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
         return count
     
-    def gethwnds(self, pid: int):
-        def callback(hwnd: int, hwnds: list):
-            _, fpid = win32process.GetWindowThreadProcessId(hwnd)
-            if fpid == pid:
-                hwnds.append(hwnd)
-            return True
-        hwnds = []
-        win32gui.EnumWindows(callback, hwnds)
-        if not hwnds:
-            logger.critical(
-                "Hwnd not found! \n"
-                "1.Perhaps emulator was killed. \n"
-                "2.Environment has something wrong. Please check the running environment. "
-            )
-            raise HwndNotFoundError("Hwnd not found")
-        return hwnds
+    @staticmethod
+    def gethwnds(pid: int) -> list:
+        return winapi.gethwnds(pid)
 
-    def _switch_window(self, hwnd:int, arg:int):
-        win32gui.ShowWindow(hwnd,arg)
+    @staticmethod
+    def getprocess(instance: EmulatorInstance):
+        return winapi.getprocess(instance)
+
+    @staticmethod
+    def _switch_window(hwnd: int, arg: int):
+        winapi.ShowWindow(hwnd, arg)
+        return True
 
     def switch_window(self, arg: int):
         if self.process is None:
             return
         for hwnd in self.hwnds:
-            if not win32gui.IsWindow(hwnd):
+            if not winapi.IsWindow(hwnd):
                 continue
-            if win32gui.GetParent(hwnd):
+            if winapi.GetParent(hwnd):
                 continue
-            if set(win32gui.GetWindowRect(hwnd)) == {0}:
+            rect = winapi.RECT()
+            winapi.GetWindowRect(hwnd, ctypes.byref(rect))
+            if {rect.left, rect.top, rect.right, rect.bottom} == {0}:
                 continue
             self._switch_window(hwnd, arg)
 
@@ -177,7 +159,10 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             # E:\Program Files\Netease\MuMu Player 12\shell\MuMuManager.exe api -v 1 shutdown_player
             if instance.MuMuPlayer12_id is None:
                 logger.warning(f'Cannot get MuMu instance index from name {instance.name}')
-            self.execute(f'"{os.path.join(os.path.dirname(exe),"MuMuManager.exe")}" api -v {instance.MuMuPlayer12_id} shutdown_player')
+            self.execute(
+                f'"{os.path.join(os.path.dirname(exe),"MuMuManager.exe")}"'
+                f' api -v {instance.MuMuPlayer12_id} shutdown_player'
+            )
         elif instance == Emulator.LDPlayerFamily:
             # E:\Program Files\leidian\LDPlayer9\dnconsole.exe quit --index 0
             self.execute(f'"{os.path.join(os.path.dirname(exe),"dnconsole.exe")}" quit --index {instance.LDPlayer_id}')
@@ -191,7 +176,6 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             self.kill_process_by_regex(
                 rf'('
                 rf'HD-Player.exe.*"--instance" "{instance.name}"'
-                rf'|BstkSVC.exe.*-Embedding'
                 rf')'
             )
         elif instance == Emulator.BlueStacks4:
@@ -306,9 +290,14 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
             # All check passed
             break
+        
+        # Flash window
+        if self.focusedwindow != winapi.getfocusedwindow():
+            winapi.setfocustowindow(self.focusedwindow)
 
         # Check emulator process and hwnds
         self.hwnds = self.gethwnds(self.process[2])
+        self.proc = psutil.Process(self.process[2])
 
         logger.info(f'Emulator start completed')
         logger.info(f'Emulator Process: {self.process}')
@@ -350,6 +339,29 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         logger.error('Failed to stop emulator 3 times, stopped')
         return False
     
+    def emulator_check(self):
+        try:
+            if self.process is None:
+                self.process = self.getprocess(self.emulator_instance)
+                return True
+            if self.proc is None:
+                pid = self.process[2]
+                self.proc = psutil.Process(pid)
+            cmdline = DataProcessInfo(proc=self.proc, pid=self.proc.pid).cmdline
+            if self.emulator_instance.path in cmdline:
+                return True
+            else:
+                return False
+        except ProcessLookupError as e:
+            return False
+        except psutil.NoSuchProcess as e:
+            return False
+        except psutil.AccessDenied as e:
+            return False
+        except Exception as e:
+            logger.error(e)
+            return False
+
 if __name__ == '__main__':
     self = PlatformWindows('alas')
     d = self.emulator_instance

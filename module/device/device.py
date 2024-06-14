@@ -101,9 +101,11 @@ class Device(Screenshot, Control, AppControl):
             if self.config.Emulator_ControlMethod == 'minitouch':
                 self.early_minitouch_init()
 
+        import sys
         if not self.initialized:
-            self.switch_window()
             self.initialized = True
+            if sys.platform == 'win32':
+                self.switch_window()
 
     def run_simple_screenshot_benchmark(self):
         """
@@ -135,6 +137,9 @@ class Device(Screenshot, Control, AppControl):
         #     logger.warning('When not using nemu_ipc, both screenshot and control should not use nemu_ipc')
         #     self.config.Emulator_ControlMethod = 'minitouch'
         pass
+
+    def emulator_check(self):
+        return super().emulator_check()
 
     def handle_night_commission(self, daily_trigger='21:00', threshold=30):
         """
@@ -342,8 +347,8 @@ class Device(Screenshot, Control, AppControl):
         self.click_record_clear()
 
     def switch_window(self):
-        import win32con
+        from module.device.platform import winapi
         if self.config.Emulator_SilentStart:
-            return super().switch_window(win32con.SW_MINIMIZE)
+            return super().switch_window(winapi.SW_MINIMIZE)
         else:
-            return super().switch_window(win32con.SW_SHOW)
+            return super().switch_window(winapi.SW_SHOW)
