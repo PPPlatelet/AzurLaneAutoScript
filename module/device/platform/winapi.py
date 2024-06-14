@@ -9,10 +9,10 @@ from module.device.platform.emulator_windows import Emulator, EmulatorInstance
 from module.logger import logger
 
 
-PyHANDLE    = ctypes.wintypes.HANDLE
 user32      = ctypes.windll.user32
 kernel32    = ctypes.windll.kernel32
 psapi       = ctypes.windll.psapi
+PyHANDLE    = ctypes.wintypes.HANDLE
 DWORD       = ctypes.wintypes.DWORD
 WORD        = ctypes.wintypes.WORD
 BYTE        = ctypes.wintypes.BYTE
@@ -22,12 +22,12 @@ CHAR        = ctypes.wintypes.CHAR
 WCHAR       = ctypes.wintypes.WCHAR
 LPWSTR      = ctypes.wintypes.LPWSTR
 LPCWSTR     = ctypes.wintypes.LPCWSTR
-LPARAM      = ctypes.wintypes.LPARAM
 LPVOID      = ctypes.wintypes.LPVOID
 HWND        = ctypes.wintypes.HWND
+MAX_PATH    = ctypes.wintypes.MAX_PATH
+LPARAM      = ctypes.wintypes.LPARAM
 RECT        = ctypes.wintypes.RECT
 ULONG_PTR   = ctypes.wintypes.PULONG
-MAX_PATH    = ctypes.wintypes.MAX_PATH
 
 
 class EmulatorLaunchFailedError(Exception):
@@ -44,6 +44,7 @@ PROCESS_VM_READ             = 0x0010
 ERROR_NO_MORE_FILES         = 0x12
 TH32CS_SNAPPROCESS          = DWORD(0x00000002)
 
+# winbase.h
 STARTF_USESHOWWINDOW    = 1
 STARTF_USESIZE          = 2
 STARTF_USEPOSITION      = 4
@@ -54,6 +55,7 @@ STARTF_FORCEOFFFEEDBACK = 128
 STARTF_USESTDHANDLES    = 256
 STARTF_USEHOTKEY        = 512
 
+# winuser.h
 SW_HIDE             = 0
 SW_SHOWNORMAL       = 1
 SW_NORMAL           = 1
@@ -70,6 +72,7 @@ SW_SHOWDEFAULT      = 10
 SW_FORCEMINIMIZE    = 11
 SW_MAX              = 11
 
+# winuser.h
 DEBUG_PROCESS               = 1
 DEBUG_ONLY_THIS_PROCESS     = 2
 CREATE_SUSPENDED            = 4
