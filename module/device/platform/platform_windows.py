@@ -66,7 +66,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
     @staticmethod
     def getprocess(instance: EmulatorInstance):
-        return winapi.findemulatorprocess(instance)
+        return winapi.getprocess(instance)
 
     def switchwindow(self, arg: int):
         if self.process is None:
@@ -282,6 +282,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             winapi.setfocustowindow(self.focusedwindow)
 
         # Check emulator process and hwnds
+        self.process = self.getprocess(self.emulator_instance)
         self.hwnds = self.gethwnds(self.process[2])
         self.proc = psutil.Process(self.process[2])
 
@@ -339,6 +340,8 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             else:
                 return False
         except winapi.ProcessNotFoundError as e:
+            return False
+        except winapi.WinApiError as e:
             return False
         except psutil.NoSuchProcess as e:
             return False

@@ -455,13 +455,16 @@ class AzurLaneAutoScript:
                 release_resources(next_task=task.command)
 
             # Reboot emulator
-            if not self.device.emulator_check() and task.next_run <= datetime.now():
+            if (not self.device.emulator_check() and
+                task.next_run > datetime.now() and
+                self.config.Optimization_WhenTaskQueueEmpty != 'stop_emulator'
+            ):
                 logger.warning('Emulator is not running')
                 self.device.emulator_start()
                 if not task == 'Restart':
                     self.run('start')
                 del_cached_property(self, 'config')
-                break
+                continue
                 
             if task.next_run <= datetime.now():
                 break
