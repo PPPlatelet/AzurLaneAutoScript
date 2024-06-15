@@ -8,7 +8,6 @@ from deploy.Windows.utils import DataProcessInfo
 from module.device.platform.emulator_windows import Emulator, EmulatorInstance
 from module.logger import logger
 
-
 user32      = ctypes.windll.user32
 kernel32    = ctypes.windll.kernel32
 psapi       = ctypes.windll.psapi
@@ -29,13 +28,11 @@ LPARAM      = ctypes.wintypes.LPARAM
 RECT        = ctypes.wintypes.RECT
 ULONG_PTR   = ctypes.wintypes.PULONG
 
-
-class EmulatorLaunchFailedError(Exception):
-    pass
-
-class HwndNotFoundError(Exception):
-    pass
-
+class EmulatorLaunchFailedError(Exception): ...
+class HwndNotFoundError(Exception): ...
+class ProcessNotFoundError(Exception): ...
+class WinApiError(Exception): ...
+class EmulatorNotFoundError(Exception): ...
 
 PROCESS_ALL_ACCESS          = 0x1F0FFF
 THREAD_ALL_ACCESS           = 0x1F03FF
@@ -262,7 +259,7 @@ def gethwnds(pid: int) -> list:
         raise HwndNotFoundError("Hwnd not found")
     return hwnds
 
-def _getprocess(proc: psutil.Process):
+def _findemulatorprocess(proc: psutil.Process):
     try:
         processhandle = OpenProcess(PROCESS_ALL_ACCESS, False, proc.pid)
         if not processhandle:
@@ -278,12 +275,13 @@ def _getprocess(proc: psutil.Process):
         logger.warning(f"Failed to get process and thread handles: {e}")
         return (None, None, proc.pid, proc.threads()[0].id)
 
-def getprocess(instance: EmulatorInstance):
+def findemulatorprocess(instance: EmulatorInstance):
     lppe = PROCESSENTRY32()
     lppe.dwSize = ctypes.sizeof(PROCESSENTRY32)
     hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, DWORD(0))
     Process32First(hSnapshot, ctypes.pointer(lppe))
 
+    process = None
     while Process32Next(hSnapshot, ctypes.pointer(lppe)):
         proc = psutil.Process(lppe.th32ProcessID)
         cmdline = DataProcessInfo(proc=proc, pid=proc.pid).cmdline
@@ -292,20 +290,41 @@ def getprocess(instance: EmulatorInstance):
         if instance == Emulator.MuMuPlayer12:
             match = re.search(r'\d+$', cmdline)
             if match and int(match.group()) == instance.MuMuPlayer12_id:
-                CloseHandle(hSnapshot)
-                return _getprocess(proc)
+                process = proc
+                break
         elif instance == Emulator.LDPlayerFamily:
             match = re.search(r'\d+$', cmdline)
             if match and int(match.group()) == instance.LDPlayer_id:
-                CloseHandle(hSnapshot)
-                return _getprocess(proc)
+                process = proc
+                break
         else:
             matchstr = re.search(fr'\b{instance.name}$', cmdline)
             if matchstr and matchstr.group() == instance.name:
-                CloseHandle(hSnapshot)
-                return _getprocess(proc)
+                process = proc
+                break
     else:
+        CloseHandle(hSnapshot)
         errorcode = GetLastError()
         if errorcode != ERROR_NO_MORE_FILES:
-            logger.error(f'Error: {GetLastError()}')
-        raise ProcessLookupError("Process not found")
+            logger.error(f'Error: {errorcode}')
+            raise WinApiError("Process not found")
+        
+    CloseHandle(hSnapshot)
+    return _findemulatorprocess(process)
+    
+def _switchwindow(hwnd: int, arg: int):
+    ShowWindow(hwnd, arg)
+    return True
+
+def switchwindow(hwnds: list, arg: int):
+    for hwnd in hwnds:
+        if not IsWindow(hwnd):
+                continue
+        if GetParent(hwnd):
+            continue
+        rect = RECT()
+        GetWindowRect(hwnd, ctypes.byref(rect))
+        if {rect.left, rect.top, rect.right, rect.bottom} == {0}:
+            continue
+        _switchwindow(hwnd, arg)
+    return True

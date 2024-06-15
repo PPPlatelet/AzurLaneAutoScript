@@ -66,26 +66,12 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
     @staticmethod
     def getprocess(instance: EmulatorInstance):
-        return winapi.getprocess(instance)
+        return winapi.findemulatorprocess(instance)
 
-    @staticmethod
-    def _switch_window(hwnd: int, arg: int):
-        winapi.ShowWindow(hwnd, arg)
-        return True
-
-    def switch_window(self, arg: int):
+    def switchwindow(self, arg: int):
         if self.process is None:
             return
-        for hwnd in self.hwnds:
-            if not winapi.IsWindow(hwnd):
-                continue
-            if winapi.GetParent(hwnd):
-                continue
-            rect = winapi.RECT()
-            winapi.GetWindowRect(hwnd, ctypes.byref(rect))
-            if {rect.left, rect.top, rect.right, rect.bottom} == {0}:
-                continue
-            self._switch_window(hwnd, arg)
+        return winapi.switchwindow(self.hwnds, arg)
 
     def _emulator_start(self, instance: EmulatorInstance):
         """
@@ -352,7 +338,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 return True
             else:
                 return False
-        except ProcessLookupError as e:
+        except winapi.ProcessNotFoundError as e:
             return False
         except psutil.NoSuchProcess as e:
             return False

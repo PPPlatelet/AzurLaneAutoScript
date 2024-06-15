@@ -105,7 +105,7 @@ class Device(Screenshot, Control, AppControl):
         if not self.initialized:
             self.initialized = True
             if sys.platform == 'win32':
-                self.switch_window()
+                self.switchwindow()
 
     def run_simple_screenshot_benchmark(self):
         """
@@ -139,6 +139,9 @@ class Device(Screenshot, Control, AppControl):
         pass
 
     def emulator_check(self):
+        import sys
+        if sys.platform != 'win32':
+            return True
         return super().emulator_check()
 
     def handle_night_commission(self, daily_trigger='21:00', threshold=30):
@@ -342,13 +345,13 @@ class Device(Screenshot, Control, AppControl):
             raise
         if not self.initialized:
             self.initialized = True
-        self.switch_window()
+        self.switchwindow()
         self.stuck_record_clear()
         self.click_record_clear()
 
-    def switch_window(self):
+    def switchwindow(self):
         from module.device.platform import winapi
         if self.config.Emulator_SilentStart:
-            return super().switch_window(winapi.SW_MINIMIZE)
+            return super().switchwindow(winapi.SW_MINIMIZE)
         else:
-            return super().switch_window(winapi.SW_SHOW)
+            return super().switchwindow(winapi.SW_SHOW)
