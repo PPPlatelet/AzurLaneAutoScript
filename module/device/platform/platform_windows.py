@@ -1,4 +1,3 @@
-import ctypes
 import re
 
 import psutil

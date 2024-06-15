@@ -512,6 +512,10 @@
       "goto_main": "Goto Main Page",
       "close_game": "Close Game",
       "stop_emulator": "Stop Emulator"
+    },
+    "ProcessBufferTime": {
+      "name": "Emulator turns off buffering for X minutes",
+      "help": "When the current time is less than X minutes from the next task, ALAS will switch from 'stop_emulator' to 'stay_there',\npreventing frequent start-stop cycles of the emulator.\nThis setting takes effect when the option is 'stop_emulator'."
     }
   },
   "DropRecord": {

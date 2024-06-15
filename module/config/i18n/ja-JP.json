@@ -512,6 +512,10 @@
       "goto_main": "goto_main",
       "close_game": "close_game",
       "stop_emulator": "stop_emulator"
+    },
+    "ProcessBufferTime": {
+      "name": "Optimization.ProcessBufferTime.name",
+      "help": "Optimization.ProcessBufferTime.help"
     }
   },
   "DropRecord": {

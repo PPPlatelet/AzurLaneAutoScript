@@ -455,7 +455,8 @@ class AzurLaneAutoScript:
                 release_resources(next_task=task.command)
 
             # Reboot emulator
-            if (not self.device.emulator_check() and
+            if (
+                not self.device.emulator_check() and
                 task.next_run > datetime.now() and
                 self.config.Optimization_WhenTaskQueueEmpty != 'stop_emulator'
             ):
@@ -468,10 +469,16 @@ class AzurLaneAutoScript:
                 
             if task.next_run <= datetime.now():
                 break
-            
+
             logger.info(f'Wait until {task.next_run} for task `{task.command}`')
             self.is_first_task = False
             method = self.config.Optimization_WhenTaskQueueEmpty
+            if (
+                method == 'stop_emulator' and
+                self.device.emulator_check() and
+                ((task.next_run - datetime.now()).total_seconds() / 60 <= self.config.Optimization_ProcessBufferTime)
+            ):
+                method = 'stay_there'
             if method == 'close_game':
                 logger.info('Close game during wait')
                 self.device.app_stop()

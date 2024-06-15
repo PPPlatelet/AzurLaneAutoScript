@@ -215,6 +215,10 @@
           "close_game",
           "stop_emulator"
         ]
+      },
+      "ProcessBufferTime": {
+        "type": "input",
+        "value": 10
       }
     },
     "DropRecord": {
