@@ -1,5 +1,3 @@
-import re
-
 import psutil
 
 from deploy.Windows.utils import DataProcessInfo
@@ -48,16 +46,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         Returns:
             int: Number of processes killed
         """
-        count = 0
-
-        for proc in psutil.process_iter():
-            cmdline = DataProcessInfo(proc=proc, pid=proc.pid).cmdline
-            if re.search(regex, cmdline):
-                logger.info(f'Kill emulator: {cmdline}')
-                proc.kill()
-                count += 1
-
-        return count
+        return winapi.kill_process_by_regex(regex)
     
     @staticmethod
     def gethwnds(pid: int) -> list:

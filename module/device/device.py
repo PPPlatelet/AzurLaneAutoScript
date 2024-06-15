@@ -351,6 +351,9 @@ class Device(Screenshot, Control, AppControl):
 
     def switchwindow(self):
         from module.device.platform import winapi
+        import sys
+        if sys.platform != 'win32':
+            return True
         if self.config.Emulator_SilentStart:
             return super().switchwindow(winapi.SW_MINIMIZE)
         else:

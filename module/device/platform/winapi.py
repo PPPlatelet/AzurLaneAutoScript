@@ -236,9 +236,9 @@ CreateProcessW.argtypes = [
 CreateProcessW.restype = BOOL
 
 GetForegroundWindow                 = user32.GetForegroundWindow
-SetForegroundWindow                 = user32.SetForegroundWindow
-SetForegroundWindow.argtypes        = [HWND]
-SetForegroundWindow.restype         = BOOL
+SwitchToThisWindow                  = user32.SwitchToThisWindow
+SwitchToThisWindow.argtypes         = [HWND]
+SwitchToThisWindow.restype          = BOOL
 
 ShowWindow                          = user32.ShowWindow
 IsWindow                            = user32.IsWindow
@@ -280,7 +280,8 @@ def getfocusedwindow() -> int:
     return GetForegroundWindow()
 
 def setfocustowindow(hwnd: int) -> bool:
-    return SetForegroundWindow(hwnd)
+    SwitchToThisWindow(hwnd, True)
+    return True
 
 
 def execute(command: str, arg: bool):
@@ -317,6 +318,20 @@ def execute(command: str, arg: bool):
         processinformation.dwThreadId
     )
     return process, focusedwindow
+
+
+def kill_process_by_regex(regex: str) -> int:
+    count = 0
+
+    for proc in psutil.process_iter():
+        cmdline = DataProcessInfo(proc=proc, pid=proc.pid).cmdline
+        if not re.search(regex, cmdline):
+            continue
+        logger.info(f'Kill emulator: {cmdline}')
+        proc.kill()
+        count += 1
+
+    return count
 
 
 def gethwnds(pid: int) -> list:
