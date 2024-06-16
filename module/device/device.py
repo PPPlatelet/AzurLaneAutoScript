@@ -346,9 +346,13 @@ class Device(Screenshot, Control, AppControl):
 
     def switchwindow(self):
         from module.device.platform import winapi
-        if self.config.Emulator_SilentStart == 'normal':
+        method = self.config.Emulator_SilentStart
+        if method == 'normal':
             return super().switchwindow(winapi.SW_SHOW)
-        elif self.config.Emulator_SilentStart == 'minimize':
+        elif method == 'minimize':
             return super().switchwindow(winapi.SW_MINIMIZE)
-        elif self.config.Emulator_SilentStart == 'silent':
+        elif method == 'silent':
             return True
+        else:
+            from module.exception import ScriptError
+            raise ScriptError("Wrong setting")
