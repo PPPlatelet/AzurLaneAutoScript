@@ -32,7 +32,11 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         """
         command = command.replace(r"\\", "/").replace("\\", "/").replace('"', '"')
         logger.info(f'Execute: {command}')
-        self.process, self.focusedwindow = winapi.execute(command, self.config.Emulator_SilentStart)
+        if self.config.Emulator_SilentStart == 'normal':
+            arg = False
+        else:
+            arg = True
+        self.process, self.focusedwindow = winapi.execute(command, arg)
         return True
 
     @classmethod

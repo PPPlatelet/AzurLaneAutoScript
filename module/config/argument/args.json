@@ -140,8 +140,13 @@
         "value": false
       },
       "SilentStart": {
-        "type": "checkbox",
-        "value": false
+        "type": "select",
+        "value": "normal",
+        "option": [
+          "normal",
+          "minimize",
+          "silent"
+        ]
       }
     },
     "EmulatorInfo": {

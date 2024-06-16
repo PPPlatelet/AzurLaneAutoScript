@@ -431,7 +431,10 @@
     },
     "SilentStart": {
       "name": "Start the emulator silently",
-      "help": "When checked, the emulator launched by Alas will start silently and be minimized then."
+      "help": "When the simulator is started by Alas, selecting 'Minimize mode' will cause the simulator to run minimally and selecting 'Silent mode' will cause the simulator to run silently.",
+      "normal": "Normal mode",
+      "minimize": "Minimize mode",
+      "silent": "Silent mode"
     }
   },
   "EmulatorInfo": {

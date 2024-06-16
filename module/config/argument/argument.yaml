@@ -55,7 +55,13 @@ Emulator:
     ]
   ScreenshotDedithering: false
   AdbRestart: false
-  SilentStart: false
+  SilentStart:
+    value: normal
+    option: [
+      normal,
+      minimize,
+      silent
+    ]
 EmulatorInfo:
   Emulator:
     value: auto

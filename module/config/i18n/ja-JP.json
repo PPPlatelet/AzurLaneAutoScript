@@ -431,7 +431,10 @@
     },
     "SilentStart": {
       "name": "Emulator.SilentStart.name",
-      "help": "Emulator.SilentStart.help"
+      "help": "Emulator.SilentStart.help",
+      "normal": "Normal mode",
+      "minimize": "Minimize mode",
+      "silent": "Silent mode"
     }
   },
   "EmulatorInfo": {

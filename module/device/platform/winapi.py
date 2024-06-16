@@ -378,7 +378,7 @@ def getprocess(instance: EmulatorInstance):
         try:
             proc = psutil.Process(lppe.th32ProcessID)
             cmdline = DataProcessInfo(proc=proc, pid=proc.pid).cmdline
-        except psutil.NoSuchProcess:
+        except:
             continue
         if not instance.path in cmdline:
             continue
