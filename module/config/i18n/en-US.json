@@ -515,7 +515,7 @@
     },
     "ProcessBufferTime": {
       "name": "Emulator turns off buffering for X minutes",
-      "help": "When the current time is less than X minutes from the next task, ALAS will switch from 'stop_emulator' to 'stay_there', preventing frequent start-stop cycles of the emulator.\nThis setting takes effect when the option is 'stop_emulator'."
+      "help": "When the current time is less than X minutes from the next task, ALAS will switch from 'stop_emulator' to 'stay_there', preventing frequent start-stop cycles of the emulator.\nThis setting takes effect when the option is 'stop emulator'."
     }
   },
   "DropRecord": {

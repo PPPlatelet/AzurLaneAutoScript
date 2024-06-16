@@ -1,5 +1,7 @@
 import ctypes
 import ctypes.wintypes
+from sys import getwindowsversion
+
 import re
 
 import psutil
@@ -33,10 +35,6 @@ class HwndNotFoundError(Exception): ...
 class ProcessNotFoundError(Exception): ...
 class WinApiError(Exception): ...
 
-# winnt.h line 2809
-SYNCHRONIZE                 = 0x00100000
-STANDARD_RIGHTS_REQUIRED    = 0x000F0000
-
 # winnt.h line 3961
 PROCESS_TERMINATE                   = 0x0001
 PROCESS_CREATE_THREAD               = 0x0002
@@ -64,24 +62,22 @@ THREAD_DIRECT_IMPERSONATION         = 0x0200
 THREAD_SET_LIMITED_INFORMATION      = 0x0400
 THREAD_QUERY_LIMITED_INFORMATION    = 0x0800
 
-NTDDI_WIN10     = 0x0A000000  # Windows 10
-NTDDI_WINBLUE   = 0x06030000  # Windows 8.1
-NTDDI_WIN8      = 0x06020000  # Windows 8
-NTDDI_WIN7      = 0x06010000  # Windows 7
+# winnt.h line 2809
+SYNCHRONIZE                 = 0x00100000
+STANDARD_RIGHTS_REQUIRED    = 0x000F0000
 
-# if NTDDI_VERSION >= 0x06000000: #above win7
-PROCESS_ALL_ACCESS      = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xffff
-THREAD_ALL_ACCESS       = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xffff
-# else: #below win7
-# PROCESS_ALL_ACCESS    = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xfff
-# THREAD_ALL_ACCESS     = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0x3ff
+VERSIONINFO                 = getwindowsversion()
+MAJOR, MINOR, BUILD         = VERSIONINFO.major, VERSIONINFO.minor, VERSIONINFO.build
 
-# if _WIN64: #64bit
+if (MAJOR > 6) or (MAJOR == 6 and MINOR >= 1):
+    PROCESS_ALL_ACCESS      = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xffff
+    THREAD_ALL_ACCESS       = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xffff
+else:
+    PROCESS_ALL_ACCESS      = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xfff
+    THREAD_ALL_ACCESS       = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0x3ff
+
 MAXIMUM_PROC_PER_GROUP      = 64
 MAXIMUM_PROCESSORS          = MAXIMUM_PROC_PER_GROUP
-# else: #32bit
-# MAXIMUM_PROC_PER_GROUP    = 32
-# MAXIMUM_PROCESSORS        = MAXIMUM_PROC_PER_GROUP
 
 # error.h line 23
 ERROR_NO_MORE_FILES = 0x12

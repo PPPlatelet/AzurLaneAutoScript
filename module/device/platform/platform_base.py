@@ -31,6 +31,13 @@ class PlatformBase(Connection, EmulatorManagerBase):
     - emulator_stop()
     """
 
+    def switchwindow(self, arg: int):
+        """
+        Switch emulator's window.
+        """
+        logger.info(f'Current platform {sys.platform} does not support switchwindow, skip')
+        return
+
     def emulator_start(self):
         """
         Start a emulator, until startup completed.
@@ -44,6 +51,13 @@ class PlatformBase(Connection, EmulatorManagerBase):
         Stop a emulator.
         """
         logger.info(f'Current platform {sys.platform} does not support emulator_stop, skip')
+
+    def emulator_check(self):
+        """
+        Check if emulator is running.
+        """
+        logger.info(f'Current platform {sys.platform} does not support emulator_check, skip')
+        return True
 
     @cached_property
     def emulator_info(self) -> EmulatorInfo:

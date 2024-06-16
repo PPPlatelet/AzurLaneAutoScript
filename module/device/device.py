@@ -101,11 +101,9 @@ class Device(Screenshot, Control, AppControl):
             if self.config.Emulator_ControlMethod == 'minitouch':
                 self.early_minitouch_init()
 
-        import sys
         if not self.initialized:
             self.initialized = True
-            if sys.platform == 'win32':
-                self.switchwindow()
+            self.switchwindow()
 
     def run_simple_screenshot_benchmark(self):
         """
@@ -139,9 +137,6 @@ class Device(Screenshot, Control, AppControl):
         pass
 
     def emulator_check(self):
-        import sys
-        if sys.platform != 'win32':
-            return True
         return super().emulator_check()
 
     def handle_night_commission(self, daily_trigger='21:00', threshold=30):
@@ -351,9 +346,6 @@ class Device(Screenshot, Control, AppControl):
 
     def switchwindow(self):
         from module.device.platform import winapi
-        import sys
-        if sys.platform != 'win32':
-            return True
         if self.config.Emulator_SilentStart:
             return super().switchwindow(winapi.SW_MINIMIZE)
         else:
