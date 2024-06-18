@@ -472,13 +472,19 @@ class AzurLaneAutoScript:
 
             logger.info(f'Wait until {task.next_run} for task `{task.command}`')
             self.is_first_task = False
-            method = self.config.Optimization_WhenTaskQueueEmpty
+            
+            method: str = self.config.Optimization_WhenTaskQueueEmpty
+            remainingtime: float = (task.next_run - datetime.now()).total_seconds() / 60
+            buffertime: int = self.config.Optimization_ProcessBufferTime
             if (
                 method == 'stop_emulator' and
                 self.device.emulator_check() and
-                ((task.next_run - datetime.now()).total_seconds() / 60 <= self.config.Optimization_ProcessBufferTime)
+                remainingtime <= buffertime
             ):
+                logger.info(f"The time to next task is {remainingtime}, 
+                            less than {buffertime}, fallback to stay_there")
                 method = 'stay_there'
+
             if method == 'close_game':
                 logger.info('Close game during wait')
                 self.device.app_stop()

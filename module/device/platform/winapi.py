@@ -233,7 +233,7 @@ CreateProcessW.restype = BOOL
 
 GetForegroundWindow                 = user32.GetForegroundWindow
 SwitchToThisWindow                  = user32.SwitchToThisWindow
-SwitchToThisWindow.argtypes         = [HWND]
+SwitchToThisWindow.argtypes         = [HWND, BOOL]
 SwitchToThisWindow.restype          = BOOL
 
 ShowWindow                          = user32.ShowWindow
