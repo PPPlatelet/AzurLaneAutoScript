@@ -481,7 +481,7 @@ class AzurLaneAutoScript:
                 self.device.emulator_check() and
                 remainingtime <= buffertime
             ):
-                logger.info(f"The time to next task is {remainingtime:.2f} minutes, "
+                logger.info(f"The time to next task `{task.command}` is {remainingtime:.2f} minutes, "
                             f"less than {buffertime} minutes, fallback to stay_there")
                 method = 'stay_there'
 

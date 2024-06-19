@@ -198,6 +198,10 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         logger.info("Emulator starting...")
         serial = self.emulator_instance.serial
 
+        # Flash window
+        if self.focusedwindow != winapi.getfocusedwindow():
+            winapi.setfocustowindow(self.focusedwindow)
+
         def adb_connect():
             m = self.adb_client.connect(self.serial)
             if 'connected' in m:
@@ -268,10 +272,6 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
             # All check passed
             break
-        
-        # Flash window
-        if self.focusedwindow != winapi.getfocusedwindow():
-            winapi.setfocustowindow(self.focusedwindow)
 
         # Check emulator process and hwnds
         self.process = self.getprocess(self.emulator_instance)
