@@ -28,7 +28,7 @@ HWND        = ctypes.wintypes.HWND
 MAX_PATH    = ctypes.wintypes.MAX_PATH
 LPARAM      = ctypes.wintypes.LPARAM
 RECT        = ctypes.wintypes.RECT
-ULONG_PTR   = ctypes.wintypes.PULONG
+PULONG      = ctypes.wintypes.PULONG
 
 class EmulatorLaunchFailedError(Exception): ...
 class HwndNotFoundError(Exception): ...
@@ -206,7 +206,7 @@ class PROCESSENTRY32(ctypes.Structure):
         ("dwSize",              DWORD),
         ("cntUsage",            DWORD),
         ("th32ProcessID",       DWORD),
-        ("th32DefaultHeapID",   ULONG_PTR),
+        ("th32DefaultHeapID",   PULONG),
         ("th32ModuleID",        DWORD),
         ("cntThreads",          DWORD),
         ("th32ParentProcessID", DWORD),
@@ -363,10 +363,12 @@ def _getprocess(proc: psutil.Process):
         if not threadhandle:
             raise ctypes.WinError(GetLastError())
 
-        return (PyHANDLE(processhandle), PyHANDLE(threadhandle), proc.pid, mainthreadid)
+        ret = (PyHANDLE(processhandle), PyHANDLE(threadhandle), proc.pid, mainthreadid)
+        return ret
     except Exception as e:
         logger.warning(f"Failed to get process and thread handles: {e}")
-        return (None, None, proc.pid, proc.threads()[0].id)
+        ret = (None, None, proc.pid, proc.threads()[0].id)
+        return ret
 
 def getprocess(instance: EmulatorInstance):
     lppe = PROCESSENTRY32()
@@ -416,7 +418,7 @@ def _switchwindow(hwnd: int, arg: int):
 def switchwindow(hwnds: list, arg: int):
     for hwnd in hwnds:
         if not IsWindow(hwnd):
-                continue
+            continue
         if GetParent(hwnd):
             continue
         rect = RECT()
