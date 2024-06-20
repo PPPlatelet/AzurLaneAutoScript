@@ -274,7 +274,6 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             break
 
         # Check emulator process and hwnds
-        self.process = self.getprocess(self.emulator_instance)
         self.hwnds = self.gethwnds(self.process[2])
         self.proc = psutil.Process(self.process[2])
 
@@ -286,6 +285,9 @@ class PlatformWindows(PlatformBase, EmulatorManager):
     def emulator_start(self):
         logger.hr('Emulator start', level=1)
         for _ in range(3):
+            # Stop
+            if not self._emulator_function_wrapper(self._emulator_stop):
+                return False
             # Start
             if self._emulator_function_wrapper(self._emulator_start):
                 # Success

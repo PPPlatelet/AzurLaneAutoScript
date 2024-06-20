@@ -363,12 +363,12 @@ def _getprocess(proc: psutil.Process):
         if not threadhandle:
             raise ctypes.WinError(GetLastError())
 
-        ret = (PyHANDLE(processhandle), PyHANDLE(threadhandle), proc.pid, mainthreadid)
-        return ret
+        process = (PyHANDLE(processhandle), PyHANDLE(threadhandle), proc.pid, mainthreadid)
+        return process
     except Exception as e:
         logger.warning(f"Failed to get process and thread handles: {e}")
-        ret = (None, None, proc.pid, proc.threads()[0].id)
-        return ret
+        process = (None, None, proc.pid, proc.threads()[0].id)
+        return process
 
 def getprocess(instance: EmulatorInstance):
     lppe = PROCESSENTRY32()
