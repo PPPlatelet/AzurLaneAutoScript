@@ -353,22 +353,22 @@ def gethwnds(pid: int) -> list:
 
 
 def _getprocess(proc: psutil.Process):
+    mainthreadid = proc.threads()[0].id
+    process: list = [None, None, proc.pid, mainthreadid]
     try:
         processhandle = OpenProcess(PROCESS_ALL_ACCESS, False, proc.pid)
         if not processhandle:
             raise ctypes.WinError(GetLastError())
 
-        mainthreadid = proc.threads()[0].id
         threadhandle = OpenThread(THREAD_ALL_ACCESS, False, mainthreadid)
         if not threadhandle:
             raise ctypes.WinError(GetLastError())
 
-        process = (PyHANDLE(processhandle), PyHANDLE(threadhandle), proc.pid, mainthreadid)
-        return process
+        process[0], process[1] = PyHANDLE(processhandle), PyHANDLE(threadhandle)
+        return tuple(process)
     except Exception as e:
         logger.warning(f"Failed to get process and thread handles: {e}")
-        process = (None, None, proc.pid, proc.threads()[0].id)
-        return process
+        return tuple(process)
 
 def getprocess(instance: EmulatorInstance):
     lppe = PROCESSENTRY32()

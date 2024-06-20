@@ -325,7 +325,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 pid = self.process[2]
                 self.proc = psutil.Process(pid)
             cmdline = DataProcessInfo(proc=self.proc, pid=self.proc.pid).cmdline
-            if self.emulator_instance.path in cmdline:
+            if self.emulator_instance.path in cmdline and self.proc.is_running():
                 return True
             else:
                 return False
