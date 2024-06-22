@@ -387,7 +387,7 @@ def enumprocesses():
     except GeneratorExit:
         CloseHandle(snapshot)
     finally:
-        del lppe32, snapshot, errorcode
+        del lppe32, snapshot
         
 def _getprocess(proc: psutil.Process):
     mainthreadid = proc.threads()[0].id

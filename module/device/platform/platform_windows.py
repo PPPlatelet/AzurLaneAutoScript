@@ -16,7 +16,7 @@ class EmulatorUnknown(Exception):
 
 class EmulatorStatus:
     process: tuple = None
-    psproc: psutil.Process = None
+    psproc: psutil.Process = psutil.Process()
     hwnds: list = None
     focusedwindow: int = None
 
