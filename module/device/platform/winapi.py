@@ -1,39 +1,26 @@
-import ctypes
-import ctypes.wintypes
+from ctypes import (
+    byref, sizeof, WinError, POINTER, WINFUNCTYPE,
+    WinDLL, Structure
+)
+from ctypes.wintypes import (
+    HANDLE, DWORD, WORD, BYTE, BOOL, LONG, CHAR, LPWSTR,
+    LPCWSTR, LPVOID, HWND, MAX_PATH,
+    LPARAM, RECT, PULONG
+)
+
 from sys import getwindowsversion
-
-import re
-
 import psutil
+import re
 
 from deploy.Windows.utils import DataProcessInfo
 from module.device.platform.emulator_windows import Emulator, EmulatorInstance
 from module.logger import logger
 
-user32      = ctypes.windll.user32
-kernel32    = ctypes.windll.kernel32
-psapi       = ctypes.windll.psapi
-PyHANDLE    = ctypes.wintypes.HANDLE
-DWORD       = ctypes.wintypes.DWORD
-WORD        = ctypes.wintypes.WORD
-BYTE        = ctypes.wintypes.BYTE
-BOOL        = ctypes.wintypes.BOOL
-LONG        = ctypes.wintypes.LONG
-CHAR        = ctypes.wintypes.CHAR
-WCHAR       = ctypes.wintypes.WCHAR
-LPWSTR      = ctypes.wintypes.LPWSTR
-LPCWSTR     = ctypes.wintypes.LPCWSTR
-LPVOID      = ctypes.wintypes.LPVOID
-HWND        = ctypes.wintypes.HWND
-MAX_PATH    = ctypes.wintypes.MAX_PATH
-LPARAM      = ctypes.wintypes.LPARAM
-RECT        = ctypes.wintypes.RECT
-PULONG      = ctypes.wintypes.PULONG
+user32      = WinDLL('user32', use_last_error=True)
+kernel32    = WinDLL('kernel32', use_last_error=True)
 
 class EmulatorLaunchFailedError(Exception): ...
 class HwndNotFoundError(Exception): ...
-class ProcessNotFoundError(Exception): ...
-class WinApiError(Exception): ...
 
 # winnt.h line 3961
 PROCESS_TERMINATE                   = 0x0001
@@ -88,7 +75,12 @@ TH32CS_SNAPPROCESS  = 0x00000002
 TH32CS_SNAPTHREAD   = 0x00000004
 TH32CS_SNAPMODULE   = 0x00000008
 TH32CS_SNAPMODULE32 = 0x00000010
-TH32CS_SNAPALL      = TH32CS_SNAPHEAPLIST | TH32CS_SNAPPROCESS | TH32CS_SNAPTHREAD | TH32CS_SNAPMODULE
+TH32CS_SNAPALL      = (
+    TH32CS_SNAPHEAPLIST |
+    TH32CS_SNAPPROCESS |
+    TH32CS_SNAPTHREAD |
+    TH32CS_SNAPMODULE
+)
 TH32CS_INHERIT      = 0x80000000
 
 # winbase.h line 1463
@@ -164,7 +156,7 @@ PROFILE_SERVER                      = 0x40000000
 CREATE_IGNORE_SYSTEM_DEFAULT        = 0x80000000
 
 
-class STARTUPINFO(ctypes.Structure):
+class STARTUPINFO(Structure):
     _fields_ = [
         ('cb',              DWORD),
         ('lpReserved',      LPWSTR),
@@ -180,28 +172,28 @@ class STARTUPINFO(ctypes.Structure):
         ('dwFlags',         DWORD),
         ('wShowWindow',     WORD),
         ('cbReserved2',     WORD),
-        ('lpReserved2',     ctypes.POINTER(BYTE)),
-        ('hStdInput',       PyHANDLE),
-        ('hStdOutput',      PyHANDLE),
-        ('hStdError',       PyHANDLE),
+        ('lpReserved2',     POINTER(BYTE)),
+        ('hStdInput',       HANDLE),
+        ('hStdOutput',      HANDLE),
+        ('hStdError',       HANDLE),
     ]
 
-class PROCESS_INFORMATION(ctypes.Structure):
+class PROCESSINFORMATION(Structure):
     _fields_ = [
-        ('hProcess',    PyHANDLE),
-        ('hThread',     PyHANDLE),
+        ('hProcess',    HANDLE),
+        ('hThread',     HANDLE),
         ('dwProcessId', DWORD),
         ('dwThreadId',  DWORD),
     ]
 
-class SECURITY_ATTRIBUTES(ctypes.Structure):
+class SECURITYATTRIBUTES(Structure):
     _fields_ = [
         ("nLength",                 DWORD),
-        ("lpSecurityDescriptor",    ctypes.c_void_p),
-        ("bInheritHandle",          BOOL)
+        ("lpSecurityDescriptor",    LPVOID),
+        ("bInheritHandle",          BOOL),
     ]
 
-class PROCESSENTRY32(ctypes.Structure):
+class PROCESSENTRY32(Structure):
     _fields_ = [
         ("dwSize",              DWORD),
         ("cntUsage",            DWORD),
@@ -216,20 +208,20 @@ class PROCESSENTRY32(ctypes.Structure):
     ]
 
 
-CreateProcessW = kernel32.CreateProcessW
-CreateProcessW.argtypes = [
-    LPCWSTR,
-    LPWSTR,
-    ctypes.POINTER(SECURITY_ATTRIBUTES),
-    ctypes.POINTER(SECURITY_ATTRIBUTES),
-    BOOL,
-    DWORD,
-    LPVOID,
-    LPCWSTR,
-    ctypes.POINTER(STARTUPINFO),
-    ctypes.POINTER(PROCESS_INFORMATION)
+CreateProcessW                      = kernel32.CreateProcessW
+CreateProcessW.argtypes             = [
+    LPCWSTR,                        #lpApplicationName
+    LPWSTR,                         #lpCommandLine
+    POINTER(SECURITYATTRIBUTES),    #lpProcessAttributes
+    POINTER(SECURITYATTRIBUTES),    #lpThreadAttributes
+    BOOL,                           #bInheritHandles
+    DWORD,                          #dwCreationFlags
+    LPVOID,                         #lpEnvironment
+    LPCWSTR,                        #lpCurrentDirectory
+    POINTER(STARTUPINFO),           #lpStartupInfo
+    POINTER(PROCESSINFORMATION)     #lpProcessInformation
 ]
-CreateProcessW.restype = BOOL
+CreateProcessW.restype              = BOOL
 
 GetForegroundWindow                 = user32.GetForegroundWindow
 SwitchToThisWindow                  = user32.SwitchToThisWindow
@@ -242,30 +234,30 @@ GetParent                           = user32.GetParent
 GetWindowRect                       = user32.GetWindowRect
 
 EnumWindows                         = user32.EnumWindows
-EnumWindowsProc                     = ctypes.WINFUNCTYPE(BOOL, HWND, LPARAM)
+EnumWindowsProc                     = WINFUNCTYPE(BOOL, HWND, LPARAM)
 GetWindowThreadProcessId            = user32.GetWindowThreadProcessId
-GetWindowThreadProcessId.argtypes   = [HWND, ctypes.POINTER(DWORD)]
+GetWindowThreadProcessId.argtypes   = [HWND, POINTER(DWORD)]
 GetWindowThreadProcessId.restype    = DWORD
 
 OpenProcess                         = kernel32.OpenProcess
 OpenProcess.argtypes                = [DWORD, BOOL, DWORD]
-OpenProcess.restype                 = PyHANDLE
+OpenProcess.restype                 = HANDLE
 OpenThread                          = kernel32.OpenThread
 
 CreateToolhelp32Snapshot            = kernel32.CreateToolhelp32Snapshot
 CreateToolhelp32Snapshot.argtypes   = [DWORD, DWORD]
-CreateToolhelp32Snapshot.restype    = PyHANDLE
+CreateToolhelp32Snapshot.restype    = HANDLE
 
 CloseHandle                         = kernel32.CloseHandle
-CloseHandle.argtypes                = [PyHANDLE]
+CloseHandle.argtypes                = [HANDLE]
 CloseHandle.restype                 = BOOL
 
 Process32First                      = kernel32.Process32First
-Process32First.argtypes             = [PyHANDLE, ctypes.POINTER(PROCESSENTRY32)]
+Process32First.argtypes             = [HANDLE, POINTER(PROCESSENTRY32)]
 Process32First.restype              = BOOL
 
 Process32Next                       = kernel32.Process32Next
-Process32Next.argtypes              = [PyHANDLE, ctypes.POINTER(PROCESSENTRY32)]
+Process32Next.argtypes              = [HANDLE, POINTER(PROCESSENTRY32)]
 Process32Next.restype               = BOOL
 
 GetLastError                        = kernel32.GetLastError
@@ -275,32 +267,47 @@ GetLastError.restype                = BOOL
 def getfocusedwindow() -> int:
     return GetForegroundWindow()
 
-def setfocustowindow(hwnd: int) -> bool:
+def switchtothiswindow(hwnd: int) -> bool:
     SwitchToThisWindow(hwnd, True)
     return True
 
 
 def execute(command: str, arg: bool):
-    startupinfo             = STARTUPINFO()
-    startupinfo.cb          = ctypes.sizeof(STARTUPINFO)
-    startupinfo.dwFlags     = STARTF_USESHOWWINDOW
-    startupinfo.wShowWindow = SW_HIDE if arg else SW_MINIMIZE
-    
-    focusedwindow = getfocusedwindow()
+    from shlex import split
+    from os.path import dirname
+    lpApplicationName           = split(command)[0]
+    lpCommandLine               = command
+    lpProcessAttributes         = None
+    lpThreadAttributes          = None
+    bInheritHandles             = False
+    dwCreationFlags             = (
+        CREATE_NEW_CONSOLE |
+        NORMAL_PRIORITY_CLASS |
+        CREATE_NEW_PROCESS_GROUP |
+        CREATE_DEFAULT_ERROR_MODE |
+        CREATE_UNICODE_ENVIRONMENT
+    )
+    lpEnvironment               = None
+    lpCurrentDirectory          = dirname(lpApplicationName)
+    lpStartupInfo               = STARTUPINFO()
+    lpStartupInfo.cb            = sizeof(STARTUPINFO)
+    lpStartupInfo.dwFlags       = STARTF_USESHOWWINDOW
+    lpStartupInfo.wShowWindow   = SW_HIDE if arg else SW_MINIMIZE
+    lpProcessInformation        = PROCESSINFORMATION()
 
-    processinformation = PROCESS_INFORMATION()
+    focusedwindow               = getfocusedwindow()
 
     success = CreateProcessW(
-        None,
-        command,
-        None,
-        None,
-        False,
-        DETACHED_PROCESS,
-        None,
-        None,
-        ctypes.byref(startupinfo),
-        ctypes.byref(processinformation)
+        lpApplicationName,
+        lpCommandLine,
+        lpProcessAttributes,
+        lpThreadAttributes,
+        bInheritHandles,
+        dwCreationFlags,
+        lpEnvironment,
+        lpCurrentDirectory,
+        byref(lpStartupInfo),
+        byref(lpProcessInformation)
     )
 
     if not success:
@@ -308,10 +315,10 @@ def execute(command: str, arg: bool):
         raise EmulatorLaunchFailedError(f"Failed to start emulator. Error code: {errorcode}")
     
     process = (
-        processinformation.hProcess,
-        processinformation.hThread,
-        processinformation.dwProcessId,
-        processinformation.dwThreadId
+        HANDLE(lpProcessInformation.hProcess),
+        HANDLE(lpProcessInformation.hThread),
+        lpProcessInformation.dwProcessId,
+        lpProcessInformation.dwThreadId
     )
     return process, focusedwindow
 
@@ -336,7 +343,7 @@ def gethwnds(pid: int) -> list:
     @EnumWindowsProc
     def callback(hwnd: int, lparam):
         processid = DWORD()
-        GetWindowThreadProcessId(hwnd, ctypes.byref(processid))
+        GetWindowThreadProcessId(hwnd, byref(processid))
         if processid.value == pid:
             hwnds.append(hwnd)
         return True
@@ -352,68 +359,74 @@ def gethwnds(pid: int) -> list:
     return hwnds
 
 
+def listprocesses():
+    lppe32          = PROCESSENTRY32()
+    lppe32.dwSize   = sizeof(PROCESSENTRY32)
+    snapshot        = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, DWORD(0))
+    if snapshot == -1:
+        raise RuntimeError("Failed to create process snapshot")
+
+    if not Process32First(snapshot, byref(lppe32)):
+        kernel32.CloseHandle(snapshot)
+        raise RuntimeError("Failed to get first process")
+
+    while 1:
+        yield lppe32, snapshot
+        if not kernel32.Process32Next(snapshot, byref(lppe32)):
+            # finished querying
+            errorcode = GetLastError()
+            if errorcode != ERROR_NO_MORE_FILES:
+                # error code != ERROR_NO_MORE_FILES, means that win api failed
+                raise RuntimeError("Failed to get next process")
+            # process not found
+            raise ProcessLookupError("Process not found")
+        
 def _getprocess(proc: psutil.Process):
     mainthreadid = proc.threads()[0].id
     process: list = [None, None, proc.pid, mainthreadid]
     try:
         processhandle = OpenProcess(PROCESS_ALL_ACCESS, False, proc.pid)
         if not processhandle:
-            raise ctypes.WinError(GetLastError())
+            raise WinError(GetLastError())
 
         threadhandle = OpenThread(THREAD_ALL_ACCESS, False, mainthreadid)
         if not threadhandle:
-            raise ctypes.WinError(GetLastError())
+            CloseHandle(processhandle)
+            raise WinError(GetLastError())
 
-        process[0], process[1] = PyHANDLE(processhandle), PyHANDLE(threadhandle)
+        process[0], process[1] = HANDLE(processhandle), HANDLE(threadhandle)
         return tuple(process)
     except Exception as e:
         logger.warning(f"Failed to get process and thread handles: {e}")
         return tuple(process)
 
 def getprocess(instance: EmulatorInstance):
-    lppe = PROCESSENTRY32()
-    lppe.dwSize = ctypes.sizeof(PROCESSENTRY32)
-    hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, DWORD(0))
-    Process32First(hSnapshot, ctypes.pointer(lppe))
-
-    while Process32Next(hSnapshot, ctypes.pointer(lppe)):
+    for lppe32, snapshot in listprocesses():
         try:
-            proc = psutil.Process(lppe.th32ProcessID)
+            proc    = psutil.Process(lppe32.th32ProcessID)
             cmdline = DataProcessInfo(proc=proc, pid=proc.pid).cmdline
-        except:
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
+
         if not instance.path in cmdline:
             continue
         if instance == Emulator.MuMuPlayer12:
             match = re.search(r'\d+$', cmdline)
             if match and int(match.group()) == instance.MuMuPlayer12_id:
-                break
+                CloseHandle(snapshot)
+                return _getprocess(proc)
         elif instance == Emulator.LDPlayerFamily:
             match = re.search(r'\d+$', cmdline)
             if match and int(match.group()) == instance.LDPlayer_id:
-                break
+                CloseHandle(snapshot)
+                return _getprocess(proc)
         else:
             matchstr = re.search(fr'\b{instance.name}$', cmdline)
             if matchstr and matchstr.group() == instance.name:
-                break
-    else:
-        # finished querying
-        errorcode = GetLastError()
-        CloseHandle(hSnapshot)
+                CloseHandle(snapshot)
+                return _getprocess(proc)
 
-        if errorcode != ERROR_NO_MORE_FILES:
-            # error code != ERROR_NO_MORE_FILES, means that win api failed
-            raise WinApiError(f"Win api failed with error code: {errorcode}")
-        # process not found
-        raise ProcessNotFoundError("Process not found")
-        
-    CloseHandle(hSnapshot)
-    return _getprocess(proc)
-    
-
-def _switchwindow(hwnd: int, arg: int):
-    ShowWindow(hwnd, arg)
-    return True
+    raise ProcessLookupError("Process not found")
 
 def switchwindow(hwnds: list, arg: int):
     for hwnd in hwnds:
@@ -422,8 +435,8 @@ def switchwindow(hwnds: list, arg: int):
         if GetParent(hwnd):
             continue
         rect = RECT()
-        GetWindowRect(hwnd, ctypes.byref(rect))
+        GetWindowRect(hwnd, byref(rect))
         if {rect.left, rect.top, rect.right, rect.bottom} == {0}:
             continue
-        _switchwindow(hwnd, arg)
+        ShowWindow(hwnd, arg)
     return True

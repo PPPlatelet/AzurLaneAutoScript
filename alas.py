@@ -462,6 +462,7 @@ class AzurLaneAutoScript:
                 self.config.Optimization_WhenTaskQueueEmpty != 'stop_emulator'
             ):
                 logger.warning('Emulator is not running')
+                self.device.emulator_stop()
                 self.device.emulator_start()
                 if not task == 'Restart':
                     self.run('start')
@@ -560,6 +561,7 @@ class AzurLaneAutoScript:
             # Reboot emulator
             if not self.device.emulator_check():
                 logger.warning('Emulator is not running')
+                self.device.emulator_stop()
                 self.device.emulator_start()
                 if not task == 'Restart':
                     self.run('start')

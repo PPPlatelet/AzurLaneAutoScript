@@ -15,12 +15,16 @@ class EmulatorUnknown(Exception):
 
 
 class PlatformWindows(PlatformBase, EmulatorManager):
+    initialized = False
+
     def __init__(self, config):
         super().__init__(config)
-        self.process: tuple = None
-        self.proc: psutil.Process = None
-        self.hwnds: list[int] = None
-        self.focusedwindow: int = None
+        if not PlatformWindows.initialized:
+            self.process: tuple = ()
+            self.psproc: psutil.Process = psutil.Process()
+            self.hwnds: list = []
+            self.focusedwindow: int = 0
+            self.__class__.initialized = True
 
     def execute(self, command: str):
         """
@@ -67,7 +71,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
     def _emulator_start(self, instance: EmulatorInstance):
         """
-        Start a emulator without error handling
+        Start an emulator without error handling
         """
         exe: str = instance.emulator.path
         if instance == Emulator.MuMuPlayer:
@@ -101,7 +105,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
     def _emulator_stop(self, instance: EmulatorInstance):
         """
-        Stop a emulator without error handling
+        Stop an emulator without error handling
         """
         exe: str = instance.emulator.path
         if instance == Emulator.MuMuPlayer:
@@ -196,7 +200,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
         # Flash window
         if self.focusedwindow != winapi.getfocusedwindow():
-            winapi.setfocustowindow(self.focusedwindow)
+            winapi.switchtothiswindow(self.focusedwindow)
 
         def adb_connect():
             m = self.adb_client.connect(self.serial)
@@ -271,7 +275,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
         # Check emulator process and hwnds
         self.hwnds = self.gethwnds(self.process[2])
-        self.proc = psutil.Process(self.process[2])
+        self.psproc = psutil.Process(self.process[2])
 
         logger.info(f'Emulator start completed')
         logger.info(f'Emulator Process: {self.process}')
@@ -281,9 +285,6 @@ class PlatformWindows(PlatformBase, EmulatorManager):
     def emulator_start(self):
         logger.hr('Emulator start', level=1)
         for _ in range(3):
-            # Stop
-            if not self._emulator_function_wrapper(self._emulator_stop):
-                return False
             # Start
             if self._emulator_function_wrapper(self._emulator_start):
                 # Success
@@ -301,42 +302,30 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
     def emulator_stop(self):
         logger.hr('Emulator stop', level=1)
-        for _ in range(3):
-            # Stop
-            if self._emulator_function_wrapper(self._emulator_stop):
-                # Success
-                return True
-            else:
-                # Failed to stop, start and stop again
-                if self._emulator_function_wrapper(self._emulator_start):
-                    continue
-                else:
-                    return False
-
-        logger.error('Failed to stop emulator 3 times, stopped')
-        return False
+        return self._emulator_function_wrapper(self._emulator_stop)
     
     def emulator_check(self):
         try:
             if self.process is None:
                 self.process = self.getprocess(self.emulator_instance)
                 return True
-            if self.proc is None:
-                pid = self.process[2]
-                self.proc = psutil.Process(pid)
-            cmdline = DataProcessInfo(proc=self.proc, pid=self.proc.pid).cmdline
-            if self.emulator_instance.path in cmdline and self.proc.is_running():
+            if self.psproc.pid != self.process[2]:
+                self.psproc = psutil.Process(self.process[2])
+            cmdline = DataProcessInfo(proc=self.psproc, pid=self.psproc.pid).cmdline
+            if self.emulator_instance.path in cmdline and self.psproc.is_running():
                 return True
             else:
                 return False
-        except winapi.ProcessNotFoundError as e:
+        except ProcessLookupError as e:
+            logger.warning(e)
             return False
-        except winapi.WinApiError as e:
+        except psutil.NoSuchProcess:
             return False
-        except psutil.NoSuchProcess as e:
+        except psutil.AccessDenied:
             return False
-        except psutil.AccessDenied as e:
-            return False
+        except RuntimeError as e:
+            logger.error(e)
+            raise
         except Exception as e:
             logger.error(e)
             return False
