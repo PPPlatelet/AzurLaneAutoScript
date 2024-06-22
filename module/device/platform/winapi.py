@@ -175,7 +175,7 @@ class STARTUPINFO(Structure):
         ('lpReserved2',     POINTER(BYTE)),
         ('hStdInput',       HANDLE),
         ('hStdOutput',      HANDLE),
-        ('hStdError',       HANDLE),
+        ('hStdError',       HANDLE)
     ]
 
 class PROCESSINFORMATION(Structure):
@@ -183,14 +183,14 @@ class PROCESSINFORMATION(Structure):
         ('hProcess',    HANDLE),
         ('hThread',     HANDLE),
         ('dwProcessId', DWORD),
-        ('dwThreadId',  DWORD),
+        ('dwThreadId',  DWORD)
     ]
 
 class SECURITYATTRIBUTES(Structure):
     _fields_ = [
         ("nLength",                 DWORD),
         ("lpSecurityDescriptor",    LPVOID),
-        ("bInheritHandle",          BOOL),
+        ("bInheritHandle",          BOOL)
     ]
 
 class PROCESSENTRY32(Structure):
@@ -204,7 +204,7 @@ class PROCESSENTRY32(Structure):
         ("th32ParentProcessID", DWORD),
         ("pcPriClassBase",      LONG),
         ("dwFlags",             DWORD),
-        ("szExeFile",           CHAR * MAX_PATH),
+        ("szExeFile",           CHAR * MAX_PATH)
     ]
 
 
@@ -269,6 +269,7 @@ def getfocusedwindow() -> int:
 
 def switchtothiswindow(hwnd: int) -> bool:
     SwitchToThisWindow(hwnd, True)
+    ShowWindow(hwnd, SW_RESTORE)
     return True
 
 
@@ -359,27 +360,34 @@ def gethwnds(pid: int) -> list:
     return hwnds
 
 
-def listprocesses():
+def enumprocesses():
     lppe32          = PROCESSENTRY32()
     lppe32.dwSize   = sizeof(PROCESSENTRY32)
     snapshot        = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, DWORD(0))
     if snapshot == -1:
-        raise RuntimeError("Failed to create process snapshot")
+        raise RuntimeError(f"Failed to create process snapshot. Errorcode: {GetLastError()}")
 
     if not Process32First(snapshot, byref(lppe32)):
-        kernel32.CloseHandle(snapshot)
-        raise RuntimeError("Failed to get first process")
+        CloseHandle(snapshot)
+        raise RuntimeError(f"Failed to get first process. Errorcode: {GetLastError()}")
 
-    while 1:
-        yield lppe32, snapshot
-        if not kernel32.Process32Next(snapshot, byref(lppe32)):
+    try:
+        while 1:
+            yield lppe32
+            if Process32Next(snapshot, byref(lppe32)):
+                continue
             # finished querying
             errorcode = GetLastError()
+            CloseHandle(snapshot)
             if errorcode != ERROR_NO_MORE_FILES:
                 # error code != ERROR_NO_MORE_FILES, means that win api failed
-                raise RuntimeError("Failed to get next process")
+                raise RuntimeError(f"Failed to get next process. Errorcode: {errorcode}")
             # process not found
-            raise ProcessLookupError("Process not found")
+            raise ProcessLookupError(f"Process not found. Errorcode: {errorcode}")
+    except GeneratorExit:
+        CloseHandle(snapshot)
+    finally:
+        del lppe32, snapshot, errorcode
         
 def _getprocess(proc: psutil.Process):
     mainthreadid = proc.threads()[0].id
@@ -401,7 +409,7 @@ def _getprocess(proc: psutil.Process):
         return tuple(process)
 
 def getprocess(instance: EmulatorInstance):
-    for lppe32, snapshot in listprocesses():
+    for lppe32 in enumprocesses():
         try:
             proc    = psutil.Process(lppe32.th32ProcessID)
             cmdline = DataProcessInfo(proc=proc, pid=proc.pid).cmdline
@@ -413,20 +421,19 @@ def getprocess(instance: EmulatorInstance):
         if instance == Emulator.MuMuPlayer12:
             match = re.search(r'\d+$', cmdline)
             if match and int(match.group()) == instance.MuMuPlayer12_id:
-                CloseHandle(snapshot)
+                enumprocesses().close()
                 return _getprocess(proc)
         elif instance == Emulator.LDPlayerFamily:
             match = re.search(r'\d+$', cmdline)
             if match and int(match.group()) == instance.LDPlayer_id:
-                CloseHandle(snapshot)
+                enumprocesses().close()
                 return _getprocess(proc)
         else:
             matchstr = re.search(fr'\b{instance.name}$', cmdline)
             if matchstr and matchstr.group() == instance.name:
-                CloseHandle(snapshot)
+                enumprocesses().close()
                 return _getprocess(proc)
 
-    raise ProcessLookupError("Process not found")
 
 def switchwindow(hwnds: list, arg: int):
     for hwnd in hwnds:

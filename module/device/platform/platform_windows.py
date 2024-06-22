@@ -14,18 +14,14 @@ class EmulatorUnknown(Exception):
     pass
 
 
-class PlatformWindows(PlatformBase, EmulatorManager):
-    initialized = False
+class EmulatorStatus:
+    process: tuple = None
+    psproc: psutil.Process = None
+    hwnds: list = None
+    focusedwindow: int = None
 
-    def __init__(self, config):
-        super().__init__(config)
-        if not PlatformWindows.initialized:
-            self.process: tuple = ()
-            self.psproc: psutil.Process = psutil.Process()
-            self.hwnds: list = []
-            self.focusedwindow: int = 0
-            self.__class__.initialized = True
 
+class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
     def execute(self, command: str):
         """
         Args:
@@ -55,7 +51,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             int: Number of processes killed
         """
         return winapi.kill_process_by_regex(regex)
-    
+
     @staticmethod
     def gethwnds(pid: int) -> list:
         return winapi.gethwnds(pid)
@@ -198,10 +194,6 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         logger.info("Emulator starting...")
         serial = self.emulator_instance.serial
 
-        # Flash window
-        if self.focusedwindow != winapi.getfocusedwindow():
-            winapi.switchtothiswindow(self.focusedwindow)
-
         def adb_connect():
             m = self.adb_client.connect(self.serial)
             if 'connected' in m:
@@ -273,6 +265,10 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             # All check passed
             break
 
+        # Flash window
+        if self.focusedwindow != winapi.getfocusedwindow():
+            winapi.switchtothiswindow(self.focusedwindow)
+
         # Check emulator process and hwnds
         self.hwnds = self.gethwnds(self.process[2])
         self.psproc = psutil.Process(self.process[2])
@@ -303,7 +299,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
     def emulator_stop(self):
         logger.hr('Emulator stop', level=1)
         return self._emulator_function_wrapper(self._emulator_stop)
-    
+
     def emulator_check(self):
         try:
             if self.process is None:
@@ -329,6 +325,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         except Exception as e:
             logger.error(e)
             return False
+
 
 if __name__ == '__main__':
     self = PlatformWindows('alas')
