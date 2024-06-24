@@ -18,7 +18,7 @@ class EmulatorStatus:
     process: tuple = None
     psproc: psutil.Process = psutil.Process()
     hwnds: list = None
-    focusedwindow: int = None
+    focusedwindow: tuple = None
 
 
 class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
@@ -37,6 +37,7 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
         else:
             arg = True
         self.process, self.focusedwindow = winapi.execute(command, arg)
+        logger.info(f"Current window: {self.focusedwindow[0]}")
         return True
 
     @classmethod
@@ -266,8 +267,10 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
             break
 
         # Flash window
-        if self.focusedwindow != winapi.getfocusedwindow():
-            winapi.switchtothiswindow(self.focusedwindow)
+        currentwindow = winapi.getfocusedwindow()
+        if self.focusedwindow is not None and currentwindow is not None and self.focusedwindow != currentwindow:
+            logger.info(f"Current window is {currentwindow[0]}, flash back to {self.focusedwindow[0]}")
+            winapi.setforegroundwindow(self.focusedwindow)
 
         # Check emulator process and hwnds
         self.hwnds = self.gethwnds(self.process[2])
@@ -311,7 +314,9 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
             if self.emulator_instance.path in cmdline and self.psproc.is_running():
                 return True
             else:
-                return False
+                self.process = self.getprocess(self.emulator_instance)
+                self.psproc = psutil.Process(self.process[2])
+                return True
         except ProcessLookupError as e:
             logger.warning(e)
             return False
@@ -319,12 +324,14 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
             return False
         except psutil.AccessDenied:
             return False
+        except IndexError:
+            return False
         except RuntimeError as e:
             logger.error(e)
             raise
         except Exception as e:
             logger.error(e)
-            return False
+            raise
 
 
 if __name__ == '__main__':

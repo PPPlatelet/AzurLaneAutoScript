@@ -441,6 +441,14 @@ class AzurLaneAutoScript:
             if self.config.should_reload():
                 return False
 
+    def emurestart(self, task):
+        logger.warning('Emulator is not running')
+        self.device.emulator_stop()
+        self.device.emulator_start()
+        if not task == 'Restart':
+            self.run('start')
+        del_cached_property(self, 'config')
+
     def get_next_task(self):
         """
         Returns:
@@ -454,20 +462,6 @@ class AzurLaneAutoScript:
             from module.base.resource import release_resources
             if self.config.task.command != 'Alas':
                 release_resources(next_task=task.command)
-
-            # Reboot emulator
-            if (
-                not self.device.emulator_check() and
-                task.next_run > datetime.now() and
-                self.config.Optimization_WhenTaskQueueEmpty != 'stop_emulator'
-            ):
-                logger.warning('Emulator is not running')
-                self.device.emulator_stop()
-                self.device.emulator_start()
-                if not task == 'Restart':
-                    self.run('start')
-                del_cached_property(self, 'config')
-                continue
                 
             if task.next_run <= datetime.now():
                 break
@@ -483,9 +477,11 @@ class AzurLaneAutoScript:
                 self.device.emulator_check() and
                 remainingtime <= buffertime
             ):
-                logger.info(f"The time to next task `{task.command}` is {remainingtime:.2f} minutes, "
-                            f"less than {buffertime} minutes, fallback to stay_there")
-                method = 'stay_there'
+                method = self.config.Optimization_BufferMethod
+                logger.info(
+                    f"The time to next task `{task.command}` is {remainingtime:.2f} minutes, "
+                    f"less than {buffertime} minutes, fallback to {method}"
+                )
 
             if method == 'close_game':
                 logger.info('Close game during wait')
@@ -518,6 +514,12 @@ class AzurLaneAutoScript:
                 release_resources() 
                 self.device.release_during_wait()
                 if not self.wait_until(task.next_run):
+                    method: str = self.config.Optimization_WhenTaskQueueEmpty
+                    if (
+                        not self.device.emulator_check() and
+                        method != 'stop_emulator'
+                    ):
+                        self.emurestart(task.command)
                     del_cached_property(self, 'config')
                     continue
             else:
@@ -560,12 +562,7 @@ class AzurLaneAutoScript:
             task = self.get_next_task()
             # Reboot emulator
             if not self.device.emulator_check():
-                logger.warning('Emulator is not running')
-                self.device.emulator_stop()
-                self.device.emulator_start()
-                if not task == 'Restart':
-                    self.run('start')
-                del_cached_property(self, 'config')
+                self.emurestart(task)
             # Skip first restart
             if self.is_first_task and task == 'Restart':
                 logger.info('Skip task `Restart` at scheduler start')

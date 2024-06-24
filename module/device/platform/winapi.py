@@ -1,23 +1,23 @@
+import re
+from sys import getwindowsversion
+
+import psutil
 from ctypes import (
     byref, sizeof, WinError, POINTER, WINFUNCTYPE,
     WinDLL, Structure
 )
 from ctypes.wintypes import (
-    HANDLE, DWORD, WORD, BYTE, BOOL, LONG, CHAR, LPWSTR,
-    LPCWSTR, LPVOID, HWND, MAX_PATH,
-    LPARAM, RECT, PULONG
+    HANDLE, DWORD, WORD, BYTE, BOOL, INT, UINT, LONG,
+    CHAR, LPWSTR, LPCWSTR, LPVOID, HWND, MAX_PATH,
+    LPARAM, RECT, PULONG, POINT
 )
-
-from sys import getwindowsversion
-import psutil
-import re
 
 from deploy.Windows.utils import DataProcessInfo
 from module.device.platform.emulator_windows import Emulator, EmulatorInstance
 from module.logger import logger
 
-user32      = WinDLL('user32', use_last_error=True)
-kernel32    = WinDLL('kernel32', use_last_error=True)
+user32      = WinDLL(name='user32', use_last_error=True)
+kernel32    = WinDLL(name='kernel32', use_last_error=True)
 
 class EmulatorLaunchFailedError(Exception): ...
 class HwndNotFoundError(Exception): ...
@@ -207,6 +207,16 @@ class PROCESSENTRY32(Structure):
         ("szExeFile",           CHAR * MAX_PATH)
     ]
 
+class WINDOWPLACEMENT(Structure):
+    _fields_ = [
+        ("length",              UINT),
+        ("flags",               UINT),
+        ("showCmd",             UINT),
+        ("ptMinPosition",       POINT),
+        ("ptMaxPosition",       POINT),
+        ("rcNormalPosition",    RECT)
+    ]
+
 
 CreateProcessW                      = kernel32.CreateProcessW
 CreateProcessW.argtypes             = [
@@ -224,11 +234,19 @@ CreateProcessW.argtypes             = [
 CreateProcessW.restype              = BOOL
 
 GetForegroundWindow                 = user32.GetForegroundWindow
-SwitchToThisWindow                  = user32.SwitchToThisWindow
-SwitchToThisWindow.argtypes         = [HWND, BOOL]
-SwitchToThisWindow.restype          = BOOL
+GetForegroundWindow.restype         = HWND
+SetForegroundWindow                 = user32.SetForegroundWindow
+SetForegroundWindow.argtypes        = [HWND]
+SetForegroundWindow.restype         = BOOL
+
+GetWindowPlacement                  = user32.GetWindowPlacement
+GetWindowPlacement.argtypes         = [HWND, POINTER(WINDOWPLACEMENT)]
+GetWindowPlacement.restype          = BOOL
 
 ShowWindow                          = user32.ShowWindow
+ShowWindow.argtypes                 = [HWND, INT]
+ShowWindow.restype                  = BOOL
+
 IsWindow                            = user32.IsWindow
 GetParent                           = user32.GetParent
 GetWindowRect                       = user32.GetWindowRect
@@ -264,16 +282,26 @@ GetLastError                        = kernel32.GetLastError
 GetLastError.restype                = BOOL
 
 
-def getfocusedwindow() -> int:
-    return GetForegroundWindow()
+def getfocusedwindow():
+    hwnd = GetForegroundWindow()
+    if not hwnd:
+        return None
+    wp = WINDOWPLACEMENT()
+    wp.length = sizeof(WINDOWPLACEMENT)
+    if GetWindowPlacement(hwnd, byref(wp)):
+        return hwnd, wp.showCmd
+    else:
+        return hwnd, SW_SHOWNORMAL
 
-def switchtothiswindow(hwnd: int) -> bool:
-    SwitchToThisWindow(hwnd, True)
-    ShowWindow(hwnd, SW_RESTORE)
+def setforegroundwindow(focusedwindow: tuple = ()) -> bool:
+    if not focusedwindow:
+        return False
+    SetForegroundWindow(focusedwindow[0])
+    ShowWindow(focusedwindow[0], focusedwindow[1])
     return True
 
 
-def execute(command: str, arg: bool):
+def execute(command: str, arg: bool = False):
     from shlex import split
     from os.path import dirname
     lpApplicationName           = split(command)[0]
@@ -351,11 +379,9 @@ def gethwnds(pid: int) -> list:
     
     EnumWindows(callback, 0)
     if not hwnds:
-        logger.critical(
-            "Hwnd not found! \n"
-            "1.Perhaps emulator was killed. \n"
-            "2.Environment has something wrong. Please check the running environment. "
-        )
+        logger.critical("Hwnd not found!")
+        logger.critical("1.Perhaps emulator was killed.")
+        logger.critical("2.Environment has something wrong. Please check the running environment.")
         raise HwndNotFoundError("Hwnd not found")
     return hwnds
 
@@ -388,10 +414,11 @@ def enumprocesses():
         CloseHandle(snapshot)
     finally:
         del lppe32, snapshot
+        if 'errorcode' in locals():
+            del errorcode
         
 def _getprocess(proc: psutil.Process):
     mainthreadid = proc.threads()[0].id
-    process: list = [None, None, proc.pid, mainthreadid]
     try:
         processhandle = OpenProcess(PROCESS_ALL_ACCESS, False, proc.pid)
         if not processhandle:
@@ -402,11 +429,10 @@ def _getprocess(proc: psutil.Process):
             CloseHandle(processhandle)
             raise WinError(GetLastError())
 
-        process[0], process[1] = HANDLE(processhandle), HANDLE(threadhandle)
-        return tuple(process)
+        return HANDLE(processhandle), HANDLE(threadhandle), proc.pid, mainthreadid
     except Exception as e:
         logger.warning(f"Failed to get process and thread handles: {e}")
-        return tuple(process)
+        return None, None, proc.pid, mainthreadid
 
 def getprocess(instance: EmulatorInstance):
     for lppe32 in enumprocesses():
@@ -435,7 +461,7 @@ def getprocess(instance: EmulatorInstance):
                 return _getprocess(proc)
 
 
-def switchwindow(hwnds: list, arg: int):
+def switchwindow(hwnds: list, arg: int = 1):
     for hwnd in hwnds:
         if not IsWindow(hwnd):
             continue
