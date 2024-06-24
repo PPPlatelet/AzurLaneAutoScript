@@ -522,6 +522,7 @@
     },
     "BufferMethod": {
       "name": "缓冲时间内",
+      "help": "",
       "stay_there": "停在原处",
       "goto_main": "前往主界面",
       "close_game": "关闭游戏"

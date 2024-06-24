@@ -326,7 +326,7 @@ def execute(command: str, arg: bool = False):
 
     focusedwindow               = getfocusedwindow()
 
-    success = CreateProcessW(
+    success                     = CreateProcessW(
         lpApplicationName,
         lpCommandLine,
         lpProcessAttributes,
@@ -350,20 +350,6 @@ def execute(command: str, arg: bool = False):
         lpProcessInformation.dwThreadId
     )
     return process, focusedwindow
-
-
-def kill_process_by_regex(regex: str) -> int:
-    count = 0
-
-    for proc in psutil.process_iter():
-        cmdline = DataProcessInfo(proc=proc, pid=proc.pid).cmdline
-        if not re.search(regex, cmdline):
-            continue
-        logger.info(f'Kill emulator: {cmdline}')
-        proc.kill()
-        count += 1
-
-    return count
 
 
 def gethwnds(pid: int) -> list:
@@ -417,6 +403,22 @@ def enumprocesses():
         if 'errorcode' in locals():
             del errorcode
         
+def kill_process_by_regex(regex: str) -> int:
+    count = 0
+
+    try:
+        for lppe32 in enumprocesses():
+            proc    = psutil.Process(lppe32.th32ProcessID)
+            cmdline = DataProcessInfo(proc=proc, pid=proc.pid).cmdline
+            if not re.search(regex, cmdline):
+                continue
+            logger.info(f'Kill emulator: {cmdline}')
+            proc.kill()
+            count += 1
+    except ProcessLookupError:
+        enumprocesses().throw(GeneratorExit)
+        return count
+
 def _getprocess(proc: psutil.Process):
     mainthreadid = proc.threads()[0].id
     try:
@@ -435,29 +437,26 @@ def _getprocess(proc: psutil.Process):
         return None, None, proc.pid, mainthreadid
 
 def getprocess(instance: EmulatorInstance):
-    for lppe32 in enumprocesses():
-        try:
-            proc    = psutil.Process(lppe32.th32ProcessID)
-            cmdline = DataProcessInfo(proc=proc, pid=proc.pid).cmdline
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
-
+    processes = enumprocesses()
+    for lppe32 in processes:
+        proc    = psutil.Process(lppe32.th32ProcessID)
+        cmdline = DataProcessInfo(proc=proc, pid=proc.pid).cmdline
         if not instance.path in cmdline:
             continue
         if instance == Emulator.MuMuPlayer12:
             match = re.search(r'\d+$', cmdline)
             if match and int(match.group()) == instance.MuMuPlayer12_id:
-                enumprocesses().close()
+                processes.close()
                 return _getprocess(proc)
         elif instance == Emulator.LDPlayerFamily:
             match = re.search(r'\d+$', cmdline)
             if match and int(match.group()) == instance.LDPlayer_id:
-                enumprocesses().close()
+                processes.close()
                 return _getprocess(proc)
         else:
             matchstr = re.search(fr'\b{instance.name}$', cmdline)
             if matchstr and matchstr.group() == instance.name:
-                enumprocesses().close()
+                processes.close()
                 return _getprocess(proc)
 
 
