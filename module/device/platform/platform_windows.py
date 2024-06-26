@@ -6,7 +6,7 @@ from module.base.timer import Timer
 from module.device.connection import AdbDeviceWithStatus
 from module.device.platform.platform_base import PlatformBase
 from module.device.platform.emulator_windows import Emulator, EmulatorInstance, EmulatorManager
-from module.device.platform import winapi
+from module.device.platform import api_windows
 from module.logger import logger
 
 
@@ -36,7 +36,7 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
             arg = False
         else:
             arg = True
-        self.process, self.focusedwindow = winapi.execute(command, arg)
+        self.process, self.focusedwindow = api_windows.execute(command, arg)
         logger.info(f"Current window: {self.focusedwindow[0]}")
         return True
 
@@ -51,20 +51,20 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
         Returns:
             int: Number of processes killed
         """
-        return winapi.kill_process_by_regex(regex)
+        return api_windows.kill_process_by_regex(regex)
 
     @staticmethod
-    def gethwnds(pid: int) -> list:
-        return winapi.gethwnds(pid)
+    def get_hwnds(pid: int) -> list:
+        return api_windows.get_hwnds(pid)
 
     @staticmethod
-    def getprocess(instance: EmulatorInstance):
-        return winapi.getprocess(instance)
+    def get_process(instance: EmulatorInstance):
+        return api_windows.get_process(instance)
 
-    def switchwindow(self, arg: int):
+    def switch_window(self, arg: int):
         if self.process is None:
             return
-        return winapi.switchwindow(self.hwnds, arg)
+        return api_windows.switch_window(self.hwnds, arg)
 
     def _emulator_start(self, instance: EmulatorInstance):
         """
@@ -267,13 +267,13 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
             break
 
         # Flash window
-        currentwindow = winapi.getfocusedwindow()
+        currentwindow = api_windows.get_focused_window()
         if self.focusedwindow is not None and currentwindow is not None and self.focusedwindow != currentwindow:
             logger.info(f"Current window is {currentwindow[0]}, flash back to {self.focusedwindow[0]}")
-            winapi.setforegroundwindow(self.focusedwindow)
+            api_windows.set_foreground_window(self.focusedwindow)
 
         # Check emulator process and hwnds
-        self.hwnds = self.gethwnds(self.process[2])
+        self.hwnds = self.get_hwnds(self.process[2])
         self.psproc = psutil.Process(self.process[2])
 
         logger.info(f'Emulator start completed')
@@ -301,12 +301,22 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
 
     def emulator_stop(self):
         logger.hr('Emulator stop', level=1)
-        return self._emulator_function_wrapper(self._emulator_stop)
+        for _ in range(3):
+            # Stop
+            if self._emulator_function_wrapper(self._emulator_stop):
+                # Success
+                return True
+            else:
+                # Failed to stop, start and stop again
+                if self._emulator_function_wrapper(self._emulator_start):
+                    continue
+                else:
+                    return False
 
     def emulator_check(self):
         try:
             if self.process is None:
-                self.process = self.getprocess(self.emulator_instance)
+                self.process = self.get_process(self.emulator_instance)
                 return True
             if self.psproc.pid != self.process[2]:
                 self.psproc = psutil.Process(self.process[2])
@@ -314,7 +324,7 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
             if self.emulator_instance.path in cmdline and self.psproc.is_running():
                 return True
             else:
-                self.process = self.getprocess(self.emulator_instance)
+                self.process = self.get_process(self.emulator_instance)
                 self.psproc = psutil.Process(self.process[2])
                 return True
         except ProcessLookupError as e:
