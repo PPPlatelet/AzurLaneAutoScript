@@ -226,7 +226,7 @@ def get_process(instance: EmulatorInstance):
     processes = enum_processes()
     for lppe32 in processes:
         pid = lppe32.th32ProcessID
-        cmdline = getcmdline(pid)
+        cmdline = get_cmdline(pid)
         if not instance.path in cmdline:
             continue
         if instance == Emulator.MuMuPlayer12:
