@@ -1,34 +1,67 @@
 import re
 
 import psutil
-from ctypes import byref, sizeof, WinError, cast, create_unicode_buffer, wstring_at, addressof
+from ctypes import byref, sizeof, cast, create_unicode_buffer, wstring_at, addressof
 from ctypes.wintypes import SIZE
 
-from deploy.Windows.utils import DataProcessInfo
 from module.device.platform.emulator_windows import Emulator, EmulatorInstance
-from module.device.platform.api_windows.const_windows import *
-from module.device.platform.api_windows.functions_windows import *
-from module.device.platform.api_windows.structures_windows import *
+from module.device.platform.winapi.const_windows import *
+from module.device.platform.winapi.functions_windows import *
+from module.device.platform.winapi.structures_windows import *
 from module.logger import logger
 
-def get_focused_window():
+
+def _error(errstr: str = '', handle: int = 0, exception: type = OSError, raiseexcept: bool = True):
+    """
+    Raise exception.
+
+    Args:
+        errstr (str): Error message
+        handle (int): Handle to close
+        exception (Type[Exception]): Exception class to raise
+        raiseexcept (bool): Flag indicating whether to raise the exception
+    """
+    errorcode = GetLastError()
+    logger.warning(f"{errstr}Errorcode: {errorcode}")
+    if not handle:
+        CloseHandle(handle)
+    if raiseexcept:
+        raise exception(errorcode)
+
+
+def getfocusedwindow():
+    """
+    Get focused window.
+
+    Returns:
+        hwnd (int): Focused window hwnd
+        WINDOWPLACEMENT:
+    """
     hwnd = GetForegroundWindow()
     if not hwnd:
-        return None
+        return 0, None
     wp = WINDOWPLACEMENT()
     wp.length = sizeof(WINDOWPLACEMENT)
     if GetWindowPlacement(hwnd, byref(wp)):
         return hwnd, wp
     else:
-        errorcode = GetLastError()
-        logger.warning(f"GetWindowPlacement failed. GetLastError = {errorcode}")
+        _error(errstr="Failed to get windowplacement. ", raiseexcept=False)
         return hwnd, None
 
-def set_foreground_window(focusedwindow: tuple = ()) -> bool:
+def setforegroundwindow(focusedwindow: tuple = ()) -> bool:
+    """
+    Refocus foreground window.
+
+    Args:
+        focusedwindow: tuple(hwnd, WINDOWPLACEMENT) | tuple(hwnd, None)
+
+    Returns:
+        bool:
+    """
     if not focusedwindow:
         return False
     SetForegroundWindow(focusedwindow[0])
-    if focusedwindow[2] is None:
+    if focusedwindow[1] is None:
         ShowWindow(focusedwindow[0], SW_SHOWNORMAL)
     else:
         SetWindowPlacement(focusedwindow[0], focusedwindow[1])
@@ -36,6 +69,19 @@ def set_foreground_window(focusedwindow: tuple = ()) -> bool:
 
 
 def execute(command: str, arg: bool = False):
+    """
+    Create a new process.
+
+    Args:
+        command (str): process's commandline
+        arg (bool): process's windowplacement
+        Example:
+            '"E:\\Program Files\\Netease\\MuMu Player 12\\shell\\MuMuPlayer.exe" -v 1'
+
+    Returns:
+        process: tuple(processhandle, threadhandle, processid, mainthreadid),
+        focusedwindow: tuple(hwnd, WINDOWPLACEMENT)
+    """
     from shlex import split
     from os.path import dirname
     lpApplicationName           = split(command)[0]
@@ -58,7 +104,7 @@ def execute(command: str, arg: bool = False):
     lpStartupInfo.wShowWindow   = SW_HIDE if arg else SW_MINIMIZE
     lpProcessInformation        = PROCESS_INFORMATION()
 
-    focusedwindow               = get_focused_window()
+    focusedwindow               = getfocusedwindow()
 
     success                     = CreateProcessW(
         lpApplicationName,
@@ -74,8 +120,7 @@ def execute(command: str, arg: bool = False):
     )
 
     if not success:
-        errorcode = GetLastError()
-        raise EmulatorLaunchFailedError(f"Failed to start emulator. Error code: {errorcode}")
+        _error(errstr="Failed to start emulator. ", exception=EmulatorLaunchFailedError)
     
     process = (
         lpProcessInformation.hProcess,
@@ -86,7 +131,30 @@ def execute(command: str, arg: bool = False):
     return process, focusedwindow
 
 
+def terminate_process(pid: int):
+    """
+    Terminate emulator process.
+
+    Args:
+        pid (int): Emulator's pid
+    """
+    hProcess = OpenProcess(PROCESS_TERMINATE, False, pid)
+    if TerminateProcess(hProcess, 0) == 0:
+        _error("Failed to kill process. ", hProcess)
+    CloseHandle(hProcess)
+    return True
+
+
 def get_hwnds(pid: int) -> list:
+    """
+    Get process's window hwnds from this processid.
+
+    Args:
+        pid (int): Emulator's pid
+
+    Returns:
+        hwnds (list): Emulator's possible window hwnds
+    """
     hwnds = []
 
     @EnumWindowsProc
@@ -99,75 +167,74 @@ def get_hwnds(pid: int) -> list:
     
     EnumWindows(callback, 0)
     if not hwnds:
-        logger.critical("Hwnd not found!")
-        logger.critical("1.Perhaps emulator was killed.")
-        logger.critical("2.Environment has something wrong. Please check the running environment.")
-        raise HwndNotFoundError("Hwnd not found")
+        logger.error("Hwnd not found!")
+        logger.error("1.Perhaps emulator was killed.")
+        logger.error("2.Environment has something wrong. Please check the running environment.")
+        _error(errstr="Hwnd not found. ", exception=HwndNotFoundError)
     return hwnds
 
 
 def get_cmdline(pid: int) -> str:
+    """
+    Get a process's command line from this processid.
+
+    Args:
+        pid (int): Emulator's pid
+
+    Returns:
+        command line (str): process's command line
+        Example:
+            '"E:\\Program Files\\Netease\\MuMu Player 12\\shell\\MuMuPlayer.exe" -v 1'
+    """
     hProcess = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, False, pid)
     if not hProcess:
-        raise WinError(GetLastError())
+        _error("OpenProcess failed. ")
 
     # Query process infomation
     pbi = PROCESS_BASIC_INFORMATION()
     returnlength = SIZE()
-    status = NtQueryInformationProcess(
-        hProcess,
-        0,
-        byref(pbi),
-        sizeof(pbi),
-        byref(returnlength)
-    )
+    status = NtQueryInformationProcess(hProcess, 0, byref(pbi), sizeof(pbi), byref(returnlength))
     if status != STATUS_SUCCESS:
-        logger.warning(f"NtQueryInformationProcess failed. Status = 0x{status}")
-        CloseHandle(hProcess)
-        raise WinError(GetLastError())
+        _error(f"NtQueryInformationProcess failed. Status: 0x{status}. ", hProcess)
 
     # Read PEB
     peb = PEB()
     if not ReadProcessMemory(hProcess, pbi.PebBaseAddress, byref(peb), sizeof(peb), None):
-        errorcode = GetLastError()
-        logger.warning(f"ReadProcessMemory failed. GetLastError = {errorcode}")
-        CloseHandle(hProcess)
-        raise WinError(errorcode)
+        _error("ReadProcessMemory failed. ", hProcess)
 
     # Read process parameters
     upp = RTL_USER_PROCESS_PARAMETERS()
     uppAddress = cast(peb.ProcessParameters, POINTER(RTL_USER_PROCESS_PARAMETERS))
     if not ReadProcessMemory(hProcess, uppAddress, byref(upp), sizeof(upp), None):
-        errorcode = GetLastError()
-        logger.warning(f"ReadProcessMemory failed. GetLastError = {errorcode}")
-        CloseHandle(hProcess)
-        raise WinError(errorcode)
+        _error("ReadProcessMemory failed. ", hProcess)
 
     # Read command line
     commandLine = create_unicode_buffer(upp.CommandLine.Length // 2)
     if not ReadProcessMemory(hProcess, upp.CommandLine.Buffer, commandLine, upp.CommandLine.Length, None):
-        errorcode = GetLastError()
-        logger.warning(f"ReadProcessMemory failed. GetLastError = {errorcode}")
-        CloseHandle(hProcess)
-        raise WinError(errorcode)
-
-    cmdline = wstring_at(addressof(commandLine), len(commandLine))
+        _error("ReadProcessMemory failed. ", hProcess)
 
     CloseHandle(hProcess)
+    cmdline = wstring_at(addressof(commandLine), len(commandLine))
 
     return cmdline
 
 
-def enum_processes():
+def _enum_processes():
+    """
+    Enumerates all the processes currently running on the system.
+
+    Yields:
+        lppe32 (PROCESSENTRY32) |
+        None (if enum failed)
+    """
     lppe32          = PROCESSENTRY32()
     lppe32.dwSize   = sizeof(PROCESSENTRY32)
     snapshot        = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, DWORD(0))
     if snapshot == -1:
-        raise RuntimeError(f"Failed to create process snapshot. Errorcode: {GetLastError()}")
+        _error()
 
     if not Process32First(snapshot, byref(lppe32)):
-        CloseHandle(snapshot)
-        raise RuntimeError(f"Failed to get first process. Errorcode: {GetLastError()}")
+        _error("Process32First failed. ", snapshot)
 
     try:
         while 1:
@@ -179,9 +246,8 @@ def enum_processes():
             CloseHandle(snapshot)
             if errorcode != ERROR_NO_MORE_FILES:
                 # error code != ERROR_NO_MORE_FILES, means that win api failed
-                raise RuntimeError(f"Failed to get next process. Errorcode: {errorcode}")
-            # process not found
-            raise ProcessLookupError(f"Process not found. Errorcode: {errorcode}")
+                raise OSError(errorcode)
+            raise ProcessLookupError(f"Finished querying. Errorcode: {errorcode}")
     except GeneratorExit:
         pass
     finally:
@@ -189,33 +255,52 @@ def enum_processes():
         del lppe32, snapshot
         
 def kill_process_by_regex(regex: str) -> int:
+    """
+        Kill processes with cmdline match the given regex.
+
+        Args:
+            regex:
+
+        Returns:
+            int: Number of processes killed
+    """
     count = 0
 
+    processes = _enum_processes()
     try:
-        for lppe32 in enum_processes():
-            proc    = psutil.Process(lppe32.th32ProcessID)
-            cmdline = DataProcessInfo(proc=proc, pid=proc.pid).cmdline
+        for lppe32 in processes:
+            pid = lppe32.th32ProcessID
+            cmdline    = get_cmdline(lppe32.th32ProcessID)
             if not re.search(regex, cmdline):
                 continue
             logger.info(f'Kill emulator: {cmdline}')
-            proc.kill()
+            terminate_process(pid)
             count += 1
     except ProcessLookupError:
-        enum_processes().throw(GeneratorExit)
+        processes.close()
         return count
 
 def _get_process(pid: int):
+    """
+    Get emulator's handle.
+
+    Args:
+        pid (int): Emulator's pid
+
+    Returns:
+        tuple(processhandle, threadhandle, processid, mainthreadid) |
+        tuple(None, None, processid, mainthreadid) | (if enum_process() failed)
+    """
     proc = psutil.Process(pid)
     mainthreadid = proc.threads()[0].id
     try:
         processhandle = OpenProcess(PROCESS_ALL_ACCESS, False, proc.pid)
         if not processhandle:
-            raise WinError(GetLastError())
+            _error("OpenProcess failed. ", processhandle)
 
         threadhandle = OpenThread(THREAD_ALL_ACCESS, False, mainthreadid)
         if not threadhandle:
-            CloseHandle(processhandle)
-            raise WinError(GetLastError())
+            _error("OpenThread failed. ", threadhandle)
 
         return processhandle, threadhandle, proc.pid, mainthreadid
     except Exception as e:
@@ -223,7 +308,18 @@ def _get_process(pid: int):
         return None, None, proc.pid, mainthreadid
 
 def get_process(instance: EmulatorInstance):
-    processes = enum_processes()
+    """
+    Get emulator's process.
+
+    Args:
+        instance (EmulatorInstance):
+
+    Returns:
+        tuple(processhandle, threadhandle, processid, mainthreadid) |
+        tuple(None, None, processid, mainthreadid) | (if enum_process() failed)
+        None (if enum_process() failed)
+    """
+    processes = _enum_processes()
     for lppe32 in processes:
         pid = lppe32.th32ProcessID
         cmdline = get_cmdline(pid)
@@ -246,7 +342,17 @@ def get_process(instance: EmulatorInstance):
                 return _get_process(pid)
 
 
-def switch_window(hwnds: list, arg: int = 1):
+def switch_window(hwnds: list, arg: int = SW_SHOWNORMAL):
+    """
+    Switch emulator's windowplacement to the given arg
+
+    Args:
+        hwnds (list): Possible emulator's window hwnds
+        arg (int): Emulator's windowplacement
+
+    Returns:
+        bool:
+    """
     for hwnd in hwnds:
         if not IsWindow(hwnd):
             continue

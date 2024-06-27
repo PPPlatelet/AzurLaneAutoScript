@@ -1,11 +1,11 @@
 from ctypes import POINTER, WINFUNCTYPE, WinDLL
 from ctypes.wintypes import (
-    HANDLE, DWORD, BOOL, INT,
+    HANDLE, DWORD, BOOL, INT, UINT,
     LPWSTR, LPCWSTR, LPVOID, HWND,
     LPARAM
 )
 
-from module.device.platform.api_windows.structures_windows import (
+from module.device.platform.winapi.structures_windows import (
     SECURITY_ATTRIBUTES, STARTUPINFO, WINDOWPLACEMENT, PROCESS_INFORMATION, PROCESSENTRY32
 )
 
@@ -17,16 +17,20 @@ CreateProcessW                      = kernel32.CreateProcessW
 CreateProcessW.argtypes             = [
     LPCWSTR,                        #lpApplicationName
     LPWSTR,                         #lpCommandLine
-    POINTER(SECURITY_ATTRIBUTES),    #lpProcessAttributes
-    POINTER(SECURITY_ATTRIBUTES),    #lpThreadAttributes
+    POINTER(SECURITY_ATTRIBUTES),   #lpProcessAttributes
+    POINTER(SECURITY_ATTRIBUTES),   #lpThreadAttributes
     BOOL,                           #bInheritHandles
     DWORD,                          #dwCreationFlags
     LPVOID,                         #lpEnvironment
     LPCWSTR,                        #lpCurrentDirectory
     POINTER(STARTUPINFO),           #lpStartupInfo
-    POINTER(PROCESS_INFORMATION)     #lpProcessInformation
+    POINTER(PROCESS_INFORMATION)    #lpProcessInformation
 ]
 CreateProcessW.restype              = BOOL
+
+TerminateProcess                    = kernel32.TerminateProcess
+TerminateProcess.argtypes           = [HANDLE, UINT]
+TerminateProcess.restype            = BOOL
 
 GetForegroundWindow                 = user32.GetForegroundWindow
 GetForegroundWindow.restype         = HWND
@@ -79,7 +83,6 @@ Process32Next.argtypes              = [HANDLE, POINTER(PROCESSENTRY32)]
 Process32Next.restype               = BOOL
 
 GetLastError                        = kernel32.GetLastError
-GetLastError.restype                = BOOL
 
 ReadProcessMemory                   = kernel32.ReadProcessMemory
 NtQueryInformationProcess           = ntdll.NtQueryInformationProcess

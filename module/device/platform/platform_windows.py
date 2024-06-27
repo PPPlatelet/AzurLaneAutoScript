@@ -1,6 +1,5 @@
 import psutil
 
-from deploy.Windows.utils import DataProcessInfo
 from module.base.decorator import run_once
 from module.base.timer import Timer
 from module.device.connection import AdbDeviceWithStatus
@@ -23,13 +22,6 @@ class EmulatorStatus:
 
 class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
     def execute(self, command: str):
-        """
-        Args:
-            command (str):
-
-        Returns:
-            bool:
-        """
         command = command.replace(r"\\", "/").replace("\\", "/").replace('"', '"')
         logger.info(f'Execute: {command}')
         if self.config.Emulator_SilentStart == 'normal':
@@ -40,18 +32,17 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
         logger.info(f"Current window: {self.focusedwindow[0]}")
         return True
 
-    @classmethod
-    def kill_process_by_regex(cls, regex: str) -> int:
-        """
-        Kill processes with cmdline match the given regex.
-
-        Args:
-            regex:
-
-        Returns:
-            int: Number of processes killed
-        """
+    @staticmethod
+    def kill_process_by_regex(regex: str) -> int:
         return api_windows.kill_process_by_regex(regex)
+
+    @staticmethod
+    def getfocusedwindow():
+        return api_windows.getfocusedwindow()
+    
+    @staticmethod
+    def setforegroundwindow(focusedwindow: tuple):
+        return api_windows.setforegroundwindow(focusedwindow)
 
     @staticmethod
     def get_hwnds(pid: int) -> list:
@@ -60,6 +51,10 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
     @staticmethod
     def get_process(instance: EmulatorInstance):
         return api_windows.get_process(instance)
+    
+    @staticmethod
+    def get_cmdline(pid: int):
+        return api_windows.get_cmdline(pid)
 
     def switch_window(self, arg: int):
         if self.process is None:
@@ -267,14 +262,17 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
             break
 
         # Flash window
-        currentwindow = api_windows.get_focused_window()
-        if self.focusedwindow is not None and currentwindow is not None and self.focusedwindow != currentwindow:
+        currentwindow = self.getfocusedwindow()
+        if (
+                self.focusedwindow is not None and
+                currentwindow is not None and
+                self.focusedwindow != currentwindow
+        ):
             logger.info(f"Current window is {currentwindow[0]}, flash back to {self.focusedwindow[0]}")
-            api_windows.set_foreground_window(self.focusedwindow)
+            self.setforegroundwindow(self.focusedwindow)
 
         # Check emulator process and hwnds
         self.hwnds = self.get_hwnds(self.process[2])
-        self.psproc = psutil.Process(self.process[2])
 
         logger.info(f'Emulator start completed')
         logger.info(f'Emulator Process: {self.process}')
@@ -318,26 +316,17 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
             if self.process is None:
                 self.process = self.get_process(self.emulator_instance)
                 return True
-            if self.psproc.pid != self.process[2]:
-                self.psproc = psutil.Process(self.process[2])
-            cmdline = DataProcessInfo(proc=self.psproc, pid=self.psproc.pid).cmdline
-            if self.emulator_instance.path in cmdline and self.psproc.is_running():
+            cmdline = self.get_cmdline(self.process[2])
+            if self.emulator_instance.path in cmdline:
                 return True
             else:
                 self.process = self.get_process(self.emulator_instance)
-                self.psproc = psutil.Process(self.process[2])
                 return True
         except ProcessLookupError as e:
-            logger.warning(e)
-            return False
-        except psutil.NoSuchProcess:
-            return False
-        except psutil.AccessDenied:
             return False
         except IndexError:
             return False
-        except RuntimeError as e:
-            logger.error(e)
+        except OSError as e:
             raise
         except Exception as e:
             logger.error(e)

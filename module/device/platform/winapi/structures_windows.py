@@ -87,8 +87,8 @@ class PEB_LDR_DATA(Structure):
         ("Length",                          ULONG),
         ("Initialized",                     BOOLEAN),
         ("SsHandle",                        HANDLE),
-        ("InLoadOrderModuleList", LIST_ENTRY),
-        ("InMemoryOrderModuleList", LIST_ENTRY),
+        ("InLoadOrderModuleList",           LIST_ENTRY),
+        ("InMemoryOrderModuleList",         LIST_ENTRY),
         ("InInitializationOrderModuleList", LIST_ENTRY)
     ]
 
@@ -154,8 +154,8 @@ class RTL_USER_PROCESS_PARAMETERS(Structure):
     _fields_ = [
         ("Reserved1",       BYTE * 16),
         ("Reserved2",       LPVOID * 10),
-        ("ImagePathName", UNICODE_STRING),
-        ("CommandLine", UNICODE_STRING)
+        ("ImagePathName",   UNICODE_STRING),
+        ("CommandLine",     UNICODE_STRING)
     ]
 
 class PROCESS_BASIC_INFORMATION(Structure):
