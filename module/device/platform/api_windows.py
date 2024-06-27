@@ -194,36 +194,38 @@ def get_cmdline(pid: int) -> str:
         Example:
             '"E:\\Program Files\\Netease\\MuMu Player 12\\shell\\MuMuPlayer.exe" -v 1'
     """
-    hProcess = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, False, pid)
-    if not hProcess:
-        _except("OpenProcess failed.")
+    try:
+        hProcess = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, False, pid)
+        if not hProcess:
+            _except("OpenProcess failed.")
 
-    # Query process infomation
-    pbi = PROCESS_BASIC_INFORMATION()
-    returnlength = SIZE()
-    status = NtQueryInformationProcess(hProcess, 0, byref(pbi), sizeof(pbi), byref(returnlength))
-    if status != STATUS_SUCCESS:
-        _except(f"NtQueryInformationProcess failed. Status: 0x{status}.", handle=hProcess)
+        # Query process infomation
+        pbi = PROCESS_BASIC_INFORMATION()
+        returnlength = SIZE()
+        status = NtQueryInformationProcess(hProcess, 0, byref(pbi), sizeof(pbi), byref(returnlength))
+        if status != STATUS_SUCCESS:
+            _except(f"NtQueryInformationProcess failed. Status: 0x{status}.", handle=hProcess)
 
-    # Read PEB
-    peb = PEB()
-    if not ReadProcessMemory(hProcess, pbi.PebBaseAddress, byref(peb), sizeof(peb), None):
-        _except("ReadProcessMemory failed.", handle=hProcess)
+        # Read PEB
+        peb = PEB()
+        if not ReadProcessMemory(hProcess, pbi.PebBaseAddress, byref(peb), sizeof(peb), None):
+            _except("ReadProcessMemory failed.", handle=hProcess)
 
-    # Read process parameters
-    upp = RTL_USER_PROCESS_PARAMETERS()
-    uppAddress = cast(peb.ProcessParameters, POINTER(RTL_USER_PROCESS_PARAMETERS))
-    if not ReadProcessMemory(hProcess, uppAddress, byref(upp), sizeof(upp), None):
-        _except("ReadProcessMemory failed.", handle=hProcess)
+        # Read process parameters
+        upp = RTL_USER_PROCESS_PARAMETERS()
+        uppAddress = cast(peb.ProcessParameters, POINTER(RTL_USER_PROCESS_PARAMETERS))
+        if not ReadProcessMemory(hProcess, uppAddress, byref(upp), sizeof(upp), None):
+            _except("ReadProcessMemory failed.", handle=hProcess)
 
-    # Read command line
-    commandLine = create_unicode_buffer(upp.CommandLine.Length // 2)
-    if not ReadProcessMemory(hProcess, upp.CommandLine.Buffer, commandLine, upp.CommandLine.Length, None):
-        _except("ReadProcessMemory failed.", handle=hProcess)
+        # Read command line
+        commandLine = create_unicode_buffer(upp.CommandLine.Length // 2)
+        if not ReadProcessMemory(hProcess, upp.CommandLine.Buffer, commandLine, upp.CommandLine.Length, None):
+            _except("ReadProcessMemory failed.", handle=hProcess)
 
-    CloseHandle(hProcess)
-    cmdline = wstring_at(addressof(commandLine), len(commandLine))
-
+        CloseHandle(hProcess)
+        cmdline = wstring_at(addressof(commandLine), len(commandLine))
+    except OSError:
+        return ''
     return cmdline
 
 
@@ -256,9 +258,8 @@ def _enum_processes():
                 _except("Process32Next failed.", statuscode=errorcode)
             _except("Finished querying.", statuscode=errorcode, level=20, exception=IterationFinished)
     except GeneratorExit:
-        pass
-    finally:
         CloseHandle(snapshot)
+    finally:
         del lppe32, snapshot
 
 
@@ -291,9 +292,8 @@ def _enum_threads():
                 _except("Process32Next failed.", statuscode=errorcode)
             _except("Finished querying.", statuscode=errorcode, level=20, exception=IterationFinished)
     except GeneratorExit:
-        pass
-    finally:
         CloseHandle(snapshot)
+    finally:
         del lpte32, snapshot
 
 
