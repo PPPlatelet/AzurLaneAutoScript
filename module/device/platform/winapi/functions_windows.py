@@ -106,3 +106,77 @@ GetLastError                        = kernel32.GetLastError
 
 ReadProcessMemory                   = kernel32.ReadProcessMemory
 NtQueryInformationProcess           = ntdll.NtQueryInformationProcess
+
+class Handle:
+    def __init__(self):
+        self.handle = None
+
+    def __enter__(self):
+        return self.handle
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.handle:
+            CloseHandle(self.handle)
+            self.handle = None
+
+class ProcessHandle(Handle):
+    def __init__(self, access, pid):
+        super().__init__()
+        self.handle = OpenProcess(access, False, pid)
+        if not self.handle:
+            report("OpenProcess failed.")
+
+class ThreadHandle(Handle):
+    def __init__(self, access, tid):
+        super().__init__()
+        self.handle = OpenThread(access, False, tid)
+        if not self.handle:
+            report("OpenThread failed.")
+
+class CreateSnapshot(Handle):
+    def __init__(self, arg):
+        super().__init__()
+        self.handle = CreateToolhelp32Snapshot(arg, DWORD(0))
+        from module.device.platform.winapi.const_windows import INVALID_HANDLE_VALUE
+        if self.handle == INVALID_HANDLE_VALUE:
+            report("CreateToolhelp32Snapshot failed.")
+
+def report(
+        msg='',
+        statuscode=-1,
+        uselog=True,
+        level=40,
+        handle=0,
+        raiseexcept=True,
+        exception=OSError,
+):
+    """
+    Raise exception.
+
+    Args:
+        msg (str):
+        statuscode (int):
+        uselog (bool):
+        level (int): Logging level
+        handle (int): Handle to close
+        raiseexcept (bool): Flag indicating whether to raise
+        exception (Type[Exception]): Exception class to raise
+    """
+    from module.logger import logger
+    if statuscode == -1:
+        statuscode = GetLastError()
+    if uselog:
+        logger.log(level, f"{msg} Status code: {statuscode}")
+    if handle:
+        CloseHandle(handle)
+    if raiseexcept:
+        raise exception(statuscode)
+
+def open_process(access, pid):
+    return ProcessHandle(access, pid)
+
+def open_thread(access, tid):
+    return ThreadHandle(access, tid)
+
+def create_snapshot(arg):
+    return CreateSnapshot(arg)
