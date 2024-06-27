@@ -9,32 +9,76 @@ from module.device.platform.winapi.functions_windows import *
 from module.device.platform.winapi.structures_windows import *
 from module.logger import logger
 
-def _except(
-        msg: str            = '',
-        statuscode: int     = -1,
-        level: int          = 40,
-        handle: int         = 0,
-        raiseexcept: bool   = True,
-        exception: type     = OSError,
-):
+
+def __yieldloop(entry32, snapshot, func: callable):
+    while 1:
+        yield entry32
+        if func(snapshot, byref(entry32)):
+            continue
+        # Finished querying
+        errorcode = GetLastError()
+        if errorcode != ERROR_NO_MORE_FILES:
+            report(f"{func.__name__} failed.", statuscode=errorcode)
+        report("Finished querying.", statuscode=errorcode, level=20, exception=IterationFinished)
+
+
+def _enum_processes():
     """
-    Raise exception.
+    Enumerates all the processes currently running on the system.
+
+    Yields:
+        lppe32 (PROCESSENTRY32) |
+        None (if enum failed)
+    """
+    lppe32          = PROCESSENTRY32()
+    lppe32.dwSize   = sizeof(PROCESSENTRY32)
+    with create_snapshot(TH32CS_SNAPPROCESS) as snapshot:
+        if not Process32First(snapshot, byref(lppe32)):
+            report("Process32First failed.")
+        yield from __yieldloop(lppe32, snapshot, Process32Next)
+
+
+def _enum_threads():
+    """
+    Enumerates all the threads currintly running on the system.
+
+    Yields:
+        lpte32 (THREADENTRY32) |
+        None (if enum failed)
+    """
+    lpte32          = THREADENTRY32()
+    lpte32.dwSize   = sizeof(THREADENTRY32)
+    with create_snapshot(TH32CS_SNAPTHREAD) as snapshot:
+        if not Thread32First(snapshot, byref(lpte32)):
+            report("Thread32First failed.")
+        yield from __yieldloop(lpte32, snapshot, Thread32Next)
+
+
+def _get_process(pid: int):
+    """
+    Get emulator's handle.
 
     Args:
-        msg (str):
-        statuscode (int):
-        level (int): Logging level
-        handle (int): Handle to close
-        raiseexcept (bool): Flag indicating whether to raise
-        exception (Type[Exception]): Exception class to raise
+        pid (int): Emulator's pid
+
+    Returns:
+        tuple(processhandle, threadhandle, processid, mainthreadid) |
+        tuple(None, None, processid, mainthreadid) | (if enum_process() failed)
     """
-    if statuscode == -1:
-        statuscode = GetLastError()
-    logger.log(level, f"{msg} Status code: {statuscode}")
-    if handle:
-        CloseHandle(handle)
-    if raiseexcept:
-        raise exception(statuscode)
+    tid = get_thread(pid)
+    try:
+        hProcess = OpenProcess(PROCESS_ALL_ACCESS, False, pid)
+        if not hProcess:
+            report("OpenProcess failed.", level=30, handle=hProcess)
+
+        hThread = OpenThread(PROCESS_ALL_ACCESS, False, tid)
+        if not hThread:
+            report("OpenThread failed.", level=30, handle=hThread)
+
+        return hProcess, hThread, pid, tid
+    except Exception as e:
+        logger.warning(f"Failed to get process and thread handles: {e}")
+        return None, None, pid, tid
 
 
 def getfocusedwindow():
@@ -53,7 +97,7 @@ def getfocusedwindow():
     if GetWindowPlacement(hwnd, byref(wp)):
         return hwnd, wp
     else:
-        _except("Failed to get windowplacement.", level=30, raiseexcept=False)
+        report("Failed to get windowplacement.", level=30, raiseexcept=False)
         return hwnd, None
 
 def setforegroundwindow(focusedwindow: tuple = ()) -> bool:
@@ -128,7 +172,7 @@ def execute(command: str, arg: bool = False):
     )
 
     if not success:
-        _except("Failed to start emulator.", exception=EmulatorLaunchFailedError)
+        report("Failed to start emulator.", exception=EmulatorLaunchFailedError)
     
     process = (
         lpProcessInformation.hProcess,
@@ -146,10 +190,9 @@ def terminate_process(pid: int):
     Args:
         pid (int): Emulator's pid
     """
-    hProcess = OpenProcess(PROCESS_TERMINATE, False, pid)
-    if TerminateProcess(hProcess, 0) == 0:
-        _except("Failed to kill process.", handle=hProcess)
-    CloseHandle(hProcess)
+    with open_process(PROCESS_TERMINATE, pid) as hProcess:
+        if TerminateProcess(hProcess, 0) == 0:
+            report("Failed to kill process.")
     return True
 
 
@@ -178,7 +221,7 @@ def get_hwnds(pid: int) -> list:
         logger.error("Hwnd not found!")
         logger.error("1.Perhaps emulator was killed.")
         logger.error("2.Environment has something wrong. Please check the running environment.")
-        _except("Hwnd not found.", exception=HwndNotFoundError)
+        report("Hwnd not found.", exception=HwndNotFoundError)
     return hwnds
 
 
@@ -195,106 +238,34 @@ def get_cmdline(pid: int) -> str:
             '"E:\\Program Files\\Netease\\MuMu Player 12\\shell\\MuMuPlayer.exe" -v 1'
     """
     try:
-        hProcess = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, False, pid)
-        if not hProcess:
-            _except("OpenProcess failed.")
+        with open_process(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, pid) as hProcess:
+            # Query process infomation
+            pbi = PROCESS_BASIC_INFORMATION()
+            returnlength = SIZE()
+            status = NtQueryInformationProcess(hProcess, 0, byref(pbi), sizeof(pbi), byref(returnlength))
+            if status != STATUS_SUCCESS:
+                report(f"NtQueryInformationProcess failed. Status: 0x{status}.")
 
-        # Query process infomation
-        pbi = PROCESS_BASIC_INFORMATION()
-        returnlength = SIZE()
-        status = NtQueryInformationProcess(hProcess, 0, byref(pbi), sizeof(pbi), byref(returnlength))
-        if status != STATUS_SUCCESS:
-            _except(f"NtQueryInformationProcess failed. Status: 0x{status}.", handle=hProcess)
+            # Read PEB
+            peb = PEB()
+            if not ReadProcessMemory(hProcess, pbi.PebBaseAddress, byref(peb), sizeof(peb), None):
+                report("Failed to read PEB.")
 
-        # Read PEB
-        peb = PEB()
-        if not ReadProcessMemory(hProcess, pbi.PebBaseAddress, byref(peb), sizeof(peb), None):
-            _except("ReadProcessMemory failed.", handle=hProcess)
+            # Read process parameters
+            upp = RTL_USER_PROCESS_PARAMETERS()
+            uppAddress = cast(peb.ProcessParameters, POINTER(RTL_USER_PROCESS_PARAMETERS))
+            if not ReadProcessMemory(hProcess, uppAddress, byref(upp), sizeof(upp), None):
+                report("Failed to read process parameters.")
 
-        # Read process parameters
-        upp = RTL_USER_PROCESS_PARAMETERS()
-        uppAddress = cast(peb.ProcessParameters, POINTER(RTL_USER_PROCESS_PARAMETERS))
-        if not ReadProcessMemory(hProcess, uppAddress, byref(upp), sizeof(upp), None):
-            _except("ReadProcessMemory failed.", handle=hProcess)
+            # Read command line
+            commandLine = create_unicode_buffer(upp.CommandLine.Length // 2)
+            if not ReadProcessMemory(hProcess, upp.CommandLine.Buffer, commandLine, upp.CommandLine.Length, None):
+                report("Failed to read command line.")
 
-        # Read command line
-        commandLine = create_unicode_buffer(upp.CommandLine.Length // 2)
-        if not ReadProcessMemory(hProcess, upp.CommandLine.Buffer, commandLine, upp.CommandLine.Length, None):
-            _except("ReadProcessMemory failed.", handle=hProcess)
-
-        CloseHandle(hProcess)
-        cmdline = wstring_at(addressof(commandLine), len(commandLine))
+            cmdline = wstring_at(addressof(commandLine), len(commandLine))
     except OSError:
         return ''
     return cmdline
-
-
-def _enum_processes():
-    """
-    Enumerates all the processes currently running on the system.
-
-    Yields:
-        lppe32 (PROCESSENTRY32) |
-        None (if enum failed)
-    """
-    lppe32          = PROCESSENTRY32()
-    lppe32.dwSize   = sizeof(PROCESSENTRY32)
-    snapshot        = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, DWORD(0))
-    if snapshot == INVALID_HANDLE_VALUE:
-        _except("CreateToolhelp32Snapshot failed.")
-
-    if not Process32First(snapshot, byref(lppe32)):
-        _except("Process32First failed.", handle=snapshot)
-
-    try:
-        while 1:
-            yield lppe32
-            if Process32Next(snapshot, byref(lppe32)):
-                continue
-            # finished querying
-            errorcode = GetLastError()
-            if errorcode != ERROR_NO_MORE_FILES:
-                # error code != ERROR_NO_MORE_FILES, means that win api failed
-                _except("Process32Next failed.", statuscode=errorcode)
-            _except("Finished querying.", statuscode=errorcode, level=20, exception=IterationFinished)
-    except GeneratorExit:
-        CloseHandle(snapshot)
-    finally:
-        del lppe32, snapshot
-
-
-def _enum_threads():
-    """
-    Enumerates all the threads currintly running on the system.
-
-    Yields:
-        lpte32 (THREADENTRY32) |
-        None (if enum failed)
-    """
-    lpte32          = THREADENTRY32()
-    lpte32.dwSize   = sizeof(THREADENTRY32)
-    snapshot        = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, DWORD(0))
-    if snapshot == INVALID_HANDLE_VALUE:
-        _except("CreateToolhelp32Snapshot failed.")
-
-    if not Thread32First(snapshot, byref(lpte32)):
-        _except("Thread32First failed.", handle=snapshot)
-
-    try:
-        while 1:
-            yield lpte32
-            if Thread32Next(snapshot, byref(lpte32)):
-                continue
-            # finished querying
-            errorcode = GetLastError()
-            if errorcode != ERROR_NO_MORE_FILES:
-                # error code != ERROR_NO_MORE_FILES, means that win api failed
-                _except("Process32Next failed.", statuscode=errorcode)
-            _except("Finished querying.", statuscode=errorcode, level=20, exception=IterationFinished)
-    except GeneratorExit:
-        CloseHandle(snapshot)
-    finally:
-        del lpte32, snapshot
 
 
 def kill_process_by_regex(regex: str) -> int:
@@ -324,6 +295,22 @@ def kill_process_by_regex(regex: str) -> int:
         return count
 
 
+def _get_thread_creation_time(tid):
+    with open_thread(THREAD_QUERY_INFORMATION, tid) as hThread:
+        creationtime    = FILETIME()
+        exittime        = FILETIME()
+        kerneltime      = FILETIME()
+        usertime        = FILETIME()
+        if not GetThreadTimes(
+            hThread,
+            byref(creationtime),
+            byref(exittime),
+            byref(kerneltime),
+            byref(usertime)
+        ):
+            return None
+        return creationtime.to_int()
+
 def get_thread(pid: int):
     """
     Get process's main thread id.
@@ -337,68 +324,20 @@ def get_thread(pid: int):
     mainthreadid    = 0
     minstarttime    = MAXULONGLONG
     threads         = _enum_threads()
-    creationtime    = FILETIME()
-    exittime        = FILETIME()
-    kerneltime      = FILETIME()
-    usertime        = FILETIME()
     try:
         for lpte32 in threads:
             if lpte32.th32OwnerProcessID != pid:
                 continue
 
-            hThread = OpenThread(THREAD_QUERY_INFORMATION, False, lpte32.th32ThreadID)
-            if not hThread:
-                CloseHandle(hThread)
-                continue
-
-            if not GetThreadTimes(
-                hThread,
-                byref(creationtime),
-                byref(exittime),
-                byref(kerneltime),
-                byref(usertime)
-            ):
-                CloseHandle(hThread)
-                continue
-
-            threadstarttime = creationtime.to_int()
-            if threadstarttime >= minstarttime:
-                CloseHandle(hThread)
+            threadstarttime = _get_thread_creation_time(lpte32.th32ThreadID)
+            if threadstarttime is None or threadstarttime >= minstarttime:
                 continue
 
             minstarttime = threadstarttime
             mainthreadid = lpte32.th32ThreadID
-            CloseHandle(hThread)
     except IterationFinished:
         threads.close()
         return mainthreadid
-
-
-def _get_process(pid: int):
-    """
-    Get emulator's handle.
-
-    Args:
-        pid (int): Emulator's pid
-
-    Returns:
-        tuple(processhandle, threadhandle, processid, mainthreadid) |
-        tuple(None, None, processid, mainthreadid) | (if enum_process() failed)
-    """
-    mtid = get_thread(pid)
-    try:
-        processhandle = OpenProcess(PROCESS_ALL_ACCESS, False, pid)
-        if not processhandle:
-            _except("OpenProcess failed.", level=30, handle=processhandle)
-
-        threadhandle = OpenThread(THREAD_ALL_ACCESS, False, mtid)
-        if not threadhandle:
-            _except("OpenThread failed.", level=30, handle=threadhandle)
-
-        return processhandle, threadhandle, pid, mtid
-    except Exception as e:
-        logger.warning(f"Failed to get process and thread handles: {e}")
-        return None, None, pid, mtid
 
 def get_process(instance: EmulatorInstance):
     """
