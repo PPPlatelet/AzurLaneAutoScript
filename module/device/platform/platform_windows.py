@@ -1,5 +1,3 @@
-import psutil
-
 from module.base.decorator import run_once
 from module.base.timer import Timer
 from module.device.connection import AdbDeviceWithStatus
@@ -15,7 +13,6 @@ class EmulatorUnknown(Exception):
 
 class EmulatorStatus:
     process: tuple = None
-    psproc: psutil.Process = psutil.Process()
     hwnds: list = None
     focusedwindow: tuple = None
 
@@ -322,7 +319,7 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
             else:
                 self.process = self.get_process(self.emulator_instance)
                 return True
-        except ProcessLookupError as e:
+        except api_windows.IterationFinished as e:
             return False
         except IndexError:
             return False

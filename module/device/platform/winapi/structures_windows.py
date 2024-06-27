@@ -7,6 +7,7 @@ from ctypes.wintypes import (
 
 class EmulatorLaunchFailedError(Exception): ...
 class HwndNotFoundError(Exception): ...
+class IterationFinished(Exception): ...
 
 class STARTUPINFO(Structure):
     _fields_ = [
@@ -57,6 +58,17 @@ class PROCESSENTRY32(Structure):
         ("pcPriClassBase",      LONG),
         ("dwFlags",             DWORD),
         ("szExeFile",           CHAR * MAX_PATH)
+    ]
+
+class THREADENTRY32(Structure):
+    _fields_ = [
+        ("dwSize",              DWORD),
+        ("cntUsage",            DWORD),
+        ("th32ThreadID",        DWORD),
+        ("th32OwnerProcessID",  DWORD),
+        ("tpBasePri",           LONG),
+        ("tpDeltaPri",          LONG),
+        ("dwFlags",             DWORD)
     ]
 
 class WINDOWPLACEMENT(Structure):
@@ -166,3 +178,12 @@ class PROCESS_BASIC_INFORMATION(Structure):
         ("UniqueProcessId", ULONG),
         ("Reserved3",       LPVOID)
     ]
+
+class FILETIME(Structure):
+    _fields_ = [
+        ("dwLowDateTime",   DWORD),
+        ("dwHighDateTime",  DWORD)
+    ]
+
+    def to_int(self):
+        return (self.dwHighDateTime << 32) + self.dwLowDateTime

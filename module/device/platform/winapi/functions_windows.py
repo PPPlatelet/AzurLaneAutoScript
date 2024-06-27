@@ -6,7 +6,9 @@ from ctypes.wintypes import (
 )
 
 from module.device.platform.winapi.structures_windows import (
-    SECURITY_ATTRIBUTES, STARTUPINFO, WINDOWPLACEMENT, PROCESS_INFORMATION, PROCESSENTRY32
+    SECURITY_ATTRIBUTES, STARTUPINFO, WINDOWPLACEMENT,
+    PROCESS_INFORMATION, PROCESSENTRY32, THREADENTRY32,
+    FILETIME
 )
 
 user32      = WinDLL(name='user32', use_last_error=True)
@@ -81,6 +83,24 @@ Process32First.restype              = BOOL
 Process32Next                       = kernel32.Process32Next
 Process32Next.argtypes              = [HANDLE, POINTER(PROCESSENTRY32)]
 Process32Next.restype               = BOOL
+
+Thread32First                       = kernel32.Thread32First
+Thread32First.argtypes              = [HANDLE, POINTER(THREADENTRY32)]
+Thread32First.restype = BOOL
+
+Thread32Next                        = kernel32.Thread32Next
+Thread32Next.argtypes               = [HANDLE, POINTER(THREADENTRY32)]
+Thread32Next.restype                = BOOL
+
+GetThreadTimes                      = kernel32.GetThreadTimes
+GetThreadTimes.argtypes             = [
+    HANDLE,
+    POINTER(FILETIME),
+    POINTER(FILETIME),
+    POINTER(FILETIME),
+    POINTER(FILETIME)
+]
+GetThreadTimes.restype              = BOOL
 
 GetLastError                        = kernel32.GetLastError
 

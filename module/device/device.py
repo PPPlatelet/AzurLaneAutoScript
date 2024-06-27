@@ -103,7 +103,7 @@ class Device(Screenshot, Control, AppControl):
 
         if not self.initialized:
             self.initialized = True
-            self.switchwindow()
+            self.switch_window()
 
     def run_simple_screenshot_benchmark(self):
         """
@@ -340,17 +340,17 @@ class Device(Screenshot, Control, AppControl):
             raise
         if not self.initialized:
             self.initialized = True
-        self.switchwindow()
+        self.switch_window()
         self.stuck_record_clear()
         self.click_record_clear()
 
-    def switchwindow(self):
+    def switch_window(self):
         from module.device.platform import api_windows
         method = self.config.Emulator_SilentStart
         if method == 'normal':
-            return super().switchwindow(api_windows.SW_SHOW)
+            return super().switch_window(api_windows.SW_SHOW)
         elif method == 'minimize':
-            return super().switchwindow(api_windows.SW_MINIMIZE)
+            return super().switch_window(api_windows.SW_MINIMIZE)
         elif method == 'silent':
             return True
         else:

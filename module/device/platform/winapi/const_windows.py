@@ -1,4 +1,5 @@
-from sys import getwindowsversion
+from sys import getwindowsversion, maxsize
+from ctypes.wintypes import LPVOID
 
 # winnt.h line 3961
 PROCESS_TERMINATE                   = 0x0001
@@ -149,3 +150,6 @@ STATUS_INSUFFICIENT_RESOURCES   = 0xC000009A
 STATUS_ACCOUNT_EXPIRED          = 0xC0000193
 STATUS_PASSWORD_MUST_CHANGE     = 0xC0000224
 STATUS_ACCOUNT_LOCKED_OUT       = 0xC0000234
+
+MAXULONGLONG            = maxsize * 2 + 1
+INVALID_HANDLE_VALUE    = LPVOID(-1).value
