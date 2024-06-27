@@ -31,7 +31,7 @@ class PlatformBase(Connection, EmulatorManagerBase):
     - emulator_stop()
     """
 
-    def switch_window(self, arg: int):
+    def switch_window(self):
         """
         Switch emulator's window.
         """
@@ -40,7 +40,7 @@ class PlatformBase(Connection, EmulatorManagerBase):
 
     def emulator_start(self):
         """
-        Start a emulator, until startup completed.
+        Start an emulator, until startup completed.
         - Retry is required.
         - Using bored sleep to wait startup is forbidden.
         """
@@ -48,7 +48,7 @@ class PlatformBase(Connection, EmulatorManagerBase):
 
     def emulator_stop(self):
         """
-        Stop a emulator.
+        Stop an emulator.
         """
         logger.info(f'Current platform {sys.platform} does not support emulator_stop, skip')
 

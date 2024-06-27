@@ -53,10 +53,19 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
     def get_cmdline(pid: int):
         return api_windows.get_cmdline(pid)
 
-    def switch_window(self, arg: int):
+    def switch_window(self):
         if self.process is None:
             return
-        return api_windows.switch_window(self.hwnds, arg)
+        method = self.config.Emulator_SilentStart
+        if method == 'normal':
+            return api_windows.switch_window(self.hwnds, api_windows.SW_SHOW)
+        elif method == 'minimize':
+            return api_windows.switch_window(self.hwnds, api_windows.SW_MINIMIZE)
+        elif method == 'silent':
+            return True
+        else:
+            from module.exception import ScriptError
+            raise ScriptError("Wrong setting")
 
     def _emulator_start(self, instance: EmulatorInstance):
         """

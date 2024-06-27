@@ -345,14 +345,4 @@ class Device(Screenshot, Control, AppControl):
         self.click_record_clear()
 
     def switch_window(self):
-        from module.device.platform import api_windows
-        method = self.config.Emulator_SilentStart
-        if method == 'normal':
-            return super().switch_window(api_windows.SW_SHOW)
-        elif method == 'minimize':
-            return super().switch_window(api_windows.SW_MINIMIZE)
-        elif method == 'silent':
-            return True
-        else:
-            from module.exception import ScriptError
-            raise ScriptError("Wrong setting")
+        return super().switch_window()
