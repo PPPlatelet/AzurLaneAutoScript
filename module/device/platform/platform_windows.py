@@ -337,7 +337,7 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
                     continue
                 else:
                     return False
-        
+
         logger.error('Failed to stop emulator 3 times, stopped')
         return False
 
