@@ -4,9 +4,7 @@ from ctypes import byref, sizeof, cast, create_unicode_buffer, wstring_at, addre
 from ctypes.wintypes import SIZE
 
 from module.device.platform.emulator_windows import Emulator, EmulatorInstance
-from module.device.platform.winapi.const_windows import *
-from module.device.platform.winapi.functions_windows import *
-from module.device.platform.winapi.structures_windows import *
+from module.device.platform.winapi import *
 from module.logger import logger
 
 
@@ -337,11 +335,12 @@ def _get_process(pid: int):
     try:
         hProcess = OpenProcess(PROCESS_ALL_ACCESS, False, pid)
         if not hProcess:
-            report("OpenProcess failed.", level=30, handle=hProcess)
+            report("OpenProcess failed.", level=30)
 
-        hThread = OpenThread(PROCESS_ALL_ACCESS, False, tid)
+        hThread = OpenThread(THREAD_ALL_ACCESS, False, tid)
         if not hThread:
-            report("OpenThread failed.", level=30, handle=hThread)
+            CloseHandle(hProcess)
+            report("OpenThread failed.", level=30)
 
         return hProcess, hThread, pid, tid
     except Exception as e:
