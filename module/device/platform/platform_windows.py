@@ -27,10 +27,25 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
             sstart = True
         if self.process is not None:
             if self.process[0] is not None and self.process[1] is not None:
-                api_windows.CloseHandle(self.process[0])
-                api_windows.CloseHandle(self.process[1])
+                self.CloseHandle(self.process[:2])
         self.process, self.focusedwindow = api_windows.execute(command, sstart)
         logger.info(f"Current window: {self.focusedwindow[0]}")
+        return True
+
+    @staticmethod
+    def CloseHandle(*args, **kwargs):
+        for handle in args:
+            if isinstance(handle, tuple):
+                for h in handle:
+                    api_windows.CloseHandle(h)
+            else:
+                api_windows.CloseHandle(handle)
+        for _, handle in kwargs.items():
+            if isinstance(handle, tuple):
+                for h in handle:
+                    api_windows.CloseHandle(h)
+            else:
+                api_windows.CloseHandle(handle)
         return True
 
     @staticmethod

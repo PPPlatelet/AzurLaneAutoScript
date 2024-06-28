@@ -6,14 +6,14 @@ from ctypes.wintypes import (
 )
 
 from module.device.platform.winapi.structures_windows import (
-    SECURITY_ATTRIBUTES, STARTUPINFO, WINDOWPLACEMENT,
+    SECURITY_ATTRIBUTES, STARTUPINFOW, WINDOWPLACEMENT,
     PROCESS_INFORMATION, PROCESSENTRY32, THREADENTRY32,
     FILETIME
 )
 
-user32      = WinDLL(name='user32', use_last_error=True)
-kernel32    = WinDLL(name='kernel32', use_last_error=True)
-ntdll       = WinDLL(name='ntdll', use_last_error=True)
+user32      = WinDLL(name='user32',     use_last_error=True)
+kernel32    = WinDLL(name='kernel32',   use_last_error=True)
+ntdll       = WinDLL(name='ntdll',      use_last_error=True)
 
 CreateProcessW                      = kernel32.CreateProcessW
 CreateProcessW.argtypes             = [
@@ -25,7 +25,7 @@ CreateProcessW.argtypes             = [
     DWORD,                          #dwCreationFlags
     LPVOID,                         #lpEnvironment
     LPCWSTR,                        #lpCurrentDirectory
-    POINTER(STARTUPINFO),           #lpStartupInfo
+    POINTER(STARTUPINFOW),          #lpStartupInfo
     POINTER(PROCESS_INFORMATION)    #lpProcessInformation
 ]
 CreateProcessW.restype              = BOOL
