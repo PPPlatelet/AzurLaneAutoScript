@@ -142,13 +142,13 @@ class CreateSnapshot(Handle):
             report("CreateToolhelp32Snapshot failed.", uselog=False)
 
 def report(
-        msg='',
-        statuscode=-1,
-        uselog=True,
-        level=40,
-        handle=0,
-        raiseexcept=True,
-        exception=OSError,
+        msg: str            = '',
+        statuscode: int     = -1,
+        uselog: bool        = True,
+        level: int          = 40,
+        handle: int         = 0,
+        raiseexcept: bool   = True,
+        exception: type     = OSError,
 ):
     """
     Raise exception.

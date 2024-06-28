@@ -278,7 +278,7 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
         if (
                 self.focusedwindow is not None and
                 currentwindow is not None and
-                self.focusedwindow != currentwindow
+                self.focusedwindow[0] != currentwindow[0]
         ):
             logger.info(f"Current window is {currentwindow[0]}, flash back to {self.focusedwindow[0]}")
             self.setforegroundwindow(self.focusedwindow)
