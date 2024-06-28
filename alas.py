@@ -445,7 +445,7 @@ class AzurLaneAutoScript:
         logger.warning('Emulator is not running')
         self.device.emulator_stop()
         self.device.emulator_start()
-        if not task == 'Restart':
+        if task != 'Restart':
             self.run('start')
         del_cached_property(self, 'config')
 

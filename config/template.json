@@ -26,7 +26,8 @@
       "CombatScreenshotInterval": 1.0,
       "TaskHoardingDuration": 0,
       "WhenTaskQueueEmpty": "goto_main",
-      "ProcessBufferTime": 10
+      "ProcessBufferTime": 10,
+      "BufferMethod": "stay_there"
     },
     "DropRecord": {
       "SaveFolder": "./screenshots",

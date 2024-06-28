@@ -124,14 +124,14 @@ class ProcessHandle(Handle):
         super().__init__()
         self.handle = OpenProcess(access, False, pid)
         if not self.handle:
-            report("OpenProcess failed.")
+            report("OpenProcess failed.", uselog=False)
 
 class ThreadHandle(Handle):
     def __init__(self, access, tid):
         super().__init__()
         self.handle = OpenThread(access, False, tid)
         if not self.handle:
-            report("OpenThread failed.")
+            report("OpenThread failed.", uselog=False)
 
 class CreateSnapshot(Handle):
     def __init__(self, arg):
@@ -139,7 +139,7 @@ class CreateSnapshot(Handle):
         self.handle = CreateToolhelp32Snapshot(arg, DWORD(0))
         from module.device.platform.winapi.const_windows import INVALID_HANDLE_VALUE
         if self.handle == INVALID_HANDLE_VALUE:
-            report("CreateToolhelp32Snapshot failed.")
+            report("CreateToolhelp32Snapshot failed.", uselog=False)
 
 def report(
         msg='',
