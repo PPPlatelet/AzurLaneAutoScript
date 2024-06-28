@@ -3134,20 +3134,23 @@
     "Campaign": {
       "Name": {
         "type": "input",
-        "value": "12-4"
+        "value": "dynamic",
+        "display": "hide"
       },
       "Event": {
         "type": "state",
         "value": "campaign_main",
         "option": [
-          "coalition_20230323"
+          "coalition_20230323",
+          "coalition_20240627"
         ],
         "option_bold": [
-          "coalition_20230323"
+          "coalition_20230323",
+          "coalition_20240627"
         ],
-        "cn": "coalition_20230323",
-        "en": "coalition_20230323",
-        "jp": "coalition_20230323",
+        "cn": "coalition_20240627",
+        "en": "coalition_20240627",
+        "jp": "coalition_20240627",
         "tw": "coalition_20230323"
       },
       "Mode": {
@@ -3186,6 +3189,16 @@
       }
     },
     "Coalition": {
+      "Mode": {
+        "type": "select",
+        "value": "hard",
+        "option": [
+          "easy",
+          "normal",
+          "hard",
+          "ex"
+        ]
+      },
       "Fleet": {
         "type": "select",
         "value": "single",
@@ -6393,14 +6406,16 @@
         "type": "state",
         "value": "campaign_main",
         "option": [
-          "coalition_20230323"
+          "coalition_20230323",
+          "coalition_20240627"
         ],
         "option_bold": [
-          "coalition_20230323"
+          "coalition_20230323",
+          "coalition_20240627"
         ],
-        "cn": "coalition_20230323",
-        "en": "coalition_20230323",
-        "jp": "coalition_20230323",
+        "cn": "coalition_20240627",
+        "en": "coalition_20240627",
+        "jp": "coalition_20240627",
         "tw": "coalition_20230323"
       },
       "Mode": {
@@ -6439,6 +6454,17 @@
       }
     },
     "Coalition": {
+      "Mode": {
+        "type": "select",
+        "value": "hard",
+        "option": [
+          "easy",
+          "normal",
+          "hard",
+          "ex"
+        ],
+        "display": "hide"
+      },
       "Fleet": {
         "type": "select",
         "value": "single",
