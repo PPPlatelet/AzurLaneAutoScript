@@ -9,7 +9,7 @@ class EmulatorLaunchFailedError(Exception): ...
 class HwndNotFoundError(Exception): ...
 class IterationFinished(Exception): ...
 
-class STARTUPINFO(Structure):
+class STARTUPINFOW(Structure):
     _fields_ = [
         ('cb',              DWORD),
         ('lpReserved',      LPWSTR),
@@ -87,6 +87,7 @@ class LIST_ENTRY(Structure):
         ("Blink", POINTER(LPVOID))
     ]
 
+# ntbasic.h line 111
 class UNICODE_STRING(Structure):
     _fields_ = [
         ("Length",          USHORT),
@@ -94,6 +95,7 @@ class UNICODE_STRING(Structure):
         ("Buffer",          PWCHAR)
     ]
 
+# ntpsapi.h line 63
 class PEB_LDR_DATA(Structure):
     _fields_ = [
         ("Length",                          ULONG),
@@ -101,9 +103,13 @@ class PEB_LDR_DATA(Structure):
         ("SsHandle",                        HANDLE),
         ("InLoadOrderModuleList",           LIST_ENTRY),
         ("InMemoryOrderModuleList",         LIST_ENTRY),
-        ("InInitializationOrderModuleList", LIST_ENTRY)
+        ("InInitializationOrderModuleList", LIST_ENTRY),
+        ("EntryInProgress",                 LPVOID),
+        ("ShutdownInProgress",              BOOLEAN),
+        ("ShutdownThreadId",                HANDLE)
     ]
 
+# ntpebteb.h line 8
 class PEB(Structure):
     _fields_ = [
         ("InheritedAddressSpace",           BOOLEAN),
@@ -162,12 +168,64 @@ class PEB(Structure):
         ("SessionId",                       ULONG)
     ]
 
+# ntrtl.h line 2320
+class CURDIR(Structure):
+    _fields_ = [
+        ("DosPath", UNICODE_STRING),
+        ("Handle",  HANDLE)
+    ]
+
+# ntrtl.h line 2329
+class RTL_DRIVE_LETTER_CURDIR(Structure):
+    _fields_ = [
+        ("Flags",       USHORT),
+        ("Length",      USHORT),
+        ("TimeStamp",   ULONG),
+        ("DosPath",     UNICODE_STRING)
+    ]
+
+# ntrtl.h line 2340
 class RTL_USER_PROCESS_PARAMETERS(Structure):
     _fields_ = [
-        ("Reserved1",       BYTE * 16),
-        ("Reserved2",       LPVOID * 10),
-        ("ImagePathName",   UNICODE_STRING),
-        ("CommandLine",     UNICODE_STRING)
+        ("MaximumLength",           ULONG),
+        ("Length",                  ULONG),
+
+        ("Flags",                   ULONG),
+        ("DebugFlags",              ULONG),
+
+        ("ConsoleHandle",           LPVOID),
+        ("ConsoleFlags",            ULONG),
+        ("StandardInput",           LPVOID),
+        ("StandardOutput",          LPVOID),
+        ("StandardError",           LPVOID),
+
+        ("CurrentDirectory",        CURDIR),
+        ("DllPath",                 UNICODE_STRING),
+        ("ImagePathName",           UNICODE_STRING),
+        ("CommandLine",             UNICODE_STRING),
+        ("Environment",             LPVOID),
+
+        ("StartingX",               ULONG),
+        ("StartingY",               ULONG),
+        ("CountX",                  ULONG),
+        ("CountY",                  ULONG),
+        ("CountCharsX",             ULONG),
+        ("CountCharsY",             ULONG),
+        ("FillAttribute",           ULONG),
+
+        ("WindowFlags",             ULONG),
+        ("ShowWindowFlags",         ULONG),
+        ("WindowTitle",             UNICODE_STRING),
+        ("DesktopInfo",             UNICODE_STRING),
+        ("ShellInfo",               UNICODE_STRING),
+        ("RuntimeData",             UNICODE_STRING),
+        ("CurrentDirectories",      RTL_DRIVE_LETTER_CURDIR * 32),
+
+        ("EnvironmentSize",         ULONG),
+        ("EnvironmentVersion",      ULONG),
+        ("PackageDependencyData",   LPVOID),
+        ("ProcessGroupId",          ULONG),
+        ("LoaderThreads",           ULONG)
     ]
 
 class PROCESS_BASIC_INFORMATION(Structure):

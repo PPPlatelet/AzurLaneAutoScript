@@ -121,8 +121,8 @@ def execute(command: str, sstart: bool = False):
     )
     lpEnvironment               = None
     lpCurrentDirectory          = dirname(lpApplicationName)
-    lpStartupInfo               = STARTUPINFO()
-    lpStartupInfo.cb            = sizeof(STARTUPINFO)
+    lpStartupInfo               = STARTUPINFOW()
+    lpStartupInfo.cb            = sizeof(STARTUPINFOW)
     lpStartupInfo.dwFlags       = STARTF_USESHOWWINDOW
     lpStartupInfo.wShowWindow   = SW_HIDE if sstart else SW_MINIMIZE
     lpProcessInformation        = PROCESS_INFORMATION()
