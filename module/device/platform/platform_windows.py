@@ -59,7 +59,9 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
 
     def switch_window(self):
         if self.process is None:
-            return
+            self.process = self.get_process(self.emulator_instance)
+        if self.hwnds is None:
+            self.hwnds = self.get_hwnds(self.process[2])
         method = self.config.Emulator_SilentStart
         if method == 'normal':
             return api_windows.switch_window(self.hwnds, api_windows.SW_SHOW)

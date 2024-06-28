@@ -166,7 +166,7 @@ def report(
     if statuscode == -1:
         statuscode = GetLastError()
     if uselog:
-        logger.log(level, f"{msg} Status code: {statuscode}")
+        logger.log(level, f"{msg} Status code: 0x{statuscode:08x}")
     if handle:
         CloseHandle(handle)
     if raiseexcept:
