@@ -236,6 +236,16 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
                 logger.warning(f'Emulator start timeout')
                 return False
 
+            # Flash window
+            currentwindow = self.getfocusedwindow()
+            if (
+                    self.focusedwindow is not None and
+                    currentwindow is not None and
+                    self.focusedwindow[0] != currentwindow[0]
+            ):
+                logger.info(f"Current window is {currentwindow[0]}, flash back to {self.focusedwindow[0]}")
+                self.setforegroundwindow(self.focusedwindow)
+
             # Check device connection
             devices = self.list_device().select(serial=serial)
             # logger.info(devices)
@@ -272,16 +282,6 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
 
             # All check passed
             break
-
-        # Flash window
-        currentwindow = self.getfocusedwindow()
-        if (
-                self.focusedwindow is not None and
-                currentwindow is not None and
-                self.focusedwindow[0] != currentwindow[0]
-        ):
-            logger.info(f"Current window is {currentwindow[0]}, flash back to {self.focusedwindow[0]}")
-            self.setforegroundwindow(self.focusedwindow)
 
         # Check emulator process and hwnds
         self.hwnds = self.get_hwnds(self.process[2])
