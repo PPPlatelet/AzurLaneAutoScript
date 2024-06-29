@@ -1,7 +1,6 @@
 import re
 
-from ctypes import byref, sizeof, cast, create_unicode_buffer, wstring_at, addressof
-from ctypes.wintypes import SIZE
+from ctypes import byref, sizeof, create_unicode_buffer, wstring_at, addressof
 
 from module.device.platform.emulator_windows import Emulator, EmulatorInstance
 from module.device.platform.winapi import *
@@ -113,7 +112,7 @@ def execute(command: str, sstart: bool = False):
     lpThreadAttributes          = None
     bInheritHandles             = False
     dwCreationFlags             = (
-        CREATE_NEW_CONSOLE |
+        CREATE_NO_WINDOW |
         NORMAL_PRIORITY_CLASS |
         CREATE_NEW_PROCESS_GROUP |
         CREATE_DEFAULT_ERROR_MODE |
@@ -212,7 +211,7 @@ def get_cmdline(pid: int) -> str:
         with open_process(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, pid) as hProcess:
             # Query process infomation
             pbi = PROCESS_BASIC_INFORMATION()
-            returnlength = SIZE()
+            returnlength = ULONG()
             status = NtQueryInformationProcess(hProcess, 0, byref(pbi), sizeof(pbi), byref(returnlength))
             if status != STATUS_SUCCESS:
                 report(f"NtQueryInformationProcess failed. Status: 0x{status}.", level=30)
@@ -224,8 +223,7 @@ def get_cmdline(pid: int) -> str:
 
             # Read process parameters
             upp = RTL_USER_PROCESS_PARAMETERS()
-            uppAddress = cast(peb.ProcessParameters, POINTER(RTL_USER_PROCESS_PARAMETERS))
-            if not ReadProcessMemory(hProcess, uppAddress, byref(upp), sizeof(upp), None):
+            if not ReadProcessMemory(hProcess, peb.ProcessParameters, byref(upp), sizeof(upp), None):
                 report("Failed to read process parameters.", level=30)
 
             # Read command line
@@ -289,7 +287,7 @@ def _get_thread_creation_time(tid):
             byref(usertime)
         ):
             return None
-        return creationtime.to_int()
+        return to_int(creationtime)
 
 def get_thread(pid: int):
     """
@@ -334,11 +332,11 @@ def _get_process(pid: int):
     tid = get_thread(pid)
     try:
         hProcess = OpenProcess(PROCESS_ALL_ACCESS, False, pid)
-        if not hProcess:
+        if hProcess is None:
             report("OpenProcess failed.", level=30)
 
         hThread = OpenThread(THREAD_ALL_ACCESS, False, tid)
-        if not hThread:
+        if hThread is None:
             CloseHandle(hProcess)
             report("OpenThread failed.", level=30)
 

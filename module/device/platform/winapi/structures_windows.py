@@ -2,7 +2,7 @@ from ctypes import POINTER, Structure
 from ctypes.wintypes import (
     HANDLE, DWORD, WORD, LARGE_INTEGER, BYTE, BOOL, BOOLEAN,
     USHORT, UINT, LONG, ULONG, CHAR, LPWSTR, LPVOID, MAX_PATH,
-    RECT, PULONG, POINT, PWCHAR
+    RECT, PULONG, POINT, PWCHAR, FILETIME
 )
 
 class EmulatorLaunchFailedError(Exception): ...
@@ -237,11 +237,5 @@ class PROCESS_BASIC_INFORMATION(Structure):
         ("Reserved3",       LPVOID)
     ]
 
-class FILETIME(Structure):
-    _fields_ = [
-        ("dwLowDateTime",   DWORD),
-        ("dwHighDateTime",  DWORD)
-    ]
-
-    def to_int(self):
-        return (self.dwHighDateTime << 32) + self.dwLowDateTime
+def to_int(time: FILETIME):
+    return (time.dwHighDateTime << 32) + time.dwLowDateTime
