@@ -1,8 +1,8 @@
-from ctypes import POINTER, WINFUNCTYPE, WinDLL
+from ctypes import POINTER, WINFUNCTYPE, WinDLL, c_size_t
 from ctypes.wintypes import (
-    HANDLE, DWORD, BOOL, INT, UINT,
-    LPWSTR, LPCWSTR, LPVOID, HWND,
-    LPARAM
+    HANDLE, DWORD, HWND, BOOL, INT, UINT,
+    LONG, ULONG, LPWSTR, LPCWSTR, LPRECT,
+    LPVOID, LPCVOID, LPARAM, PULONG
 )
 
 from module.device.platform.winapi.structures_windows import (
@@ -35,6 +35,7 @@ TerminateProcess.argtypes           = [HANDLE, UINT]
 TerminateProcess.restype            = BOOL
 
 GetForegroundWindow                 = user32.GetForegroundWindow
+GetForegroundWindow.argtypes        = []
 GetForegroundWindow.restype         = HWND
 SetForegroundWindow                 = user32.SetForegroundWindow
 SetForegroundWindow.argtypes        = [HWND]
@@ -52,11 +53,19 @@ ShowWindow.argtypes                 = [HWND, INT]
 ShowWindow.restype                  = BOOL
 
 IsWindow                            = user32.IsWindow
+IsWindow.argtypes                   = [HWND]
+IsWindow.restype                    = BOOL
 GetParent                           = user32.GetParent
+GetParent.argtypes                  = [HWND]
+GetParent.restype                   = HWND
 GetWindowRect                       = user32.GetWindowRect
+GetWindowRect.argtypes              = [HWND, LPRECT]
+GetWindowRect.restype               = BOOL
 
-EnumWindows                         = user32.EnumWindows
 EnumWindowsProc                     = WINFUNCTYPE(BOOL, HWND, LPARAM)
+EnumWindows                         = user32.EnumWindows
+EnumWindows.argtypes                = [EnumWindowsProc, LPARAM]
+EnumWindows.restype                 = BOOL
 GetWindowThreadProcessId            = user32.GetWindowThreadProcessId
 GetWindowThreadProcessId.argtypes   = [HWND, POINTER(DWORD)]
 GetWindowThreadProcessId.restype    = DWORD
@@ -86,7 +95,7 @@ Process32Next.restype               = BOOL
 
 Thread32First                       = kernel32.Thread32First
 Thread32First.argtypes              = [HANDLE, POINTER(THREADENTRY32)]
-Thread32First.restype = BOOL
+Thread32First.restype               = BOOL
 
 Thread32Next                        = kernel32.Thread32Next
 Thread32Next.argtypes               = [HANDLE, POINTER(THREADENTRY32)]
@@ -103,39 +112,43 @@ GetThreadTimes.argtypes             = [
 GetThreadTimes.restype              = BOOL
 
 GetLastError                        = kernel32.GetLastError
+GetLastError.argtypes               = []
+GetLastError.restype                = DWORD
 
+SIZE_T                              = c_size_t
+NTSTATUS                            = LONG
 ReadProcessMemory                   = kernel32.ReadProcessMemory
+ReadProcessMemory.argtypes          = [HANDLE, LPCVOID, LPVOID, SIZE_T, POINTER(SIZE_T)]
+ReadProcessMemory.restype           = BOOL
 NtQueryInformationProcess           = ntdll.NtQueryInformationProcess
+NtQueryInformationProcess.argtypes  = [HANDLE, INT, LPVOID, ULONG, PULONG]
+NtQueryInformationProcess.restype   = NTSTATUS
 
 class Handle:
-    def __init__(self):
-        self.handle = None
+    handle = None
 
     def __enter__(self):
         return self.handle
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.handle:
+        if self.handle is not None:
             CloseHandle(self.handle)
             self.handle = None
 
 class ProcessHandle(Handle):
     def __init__(self, access, pid, uselog):
-        super().__init__()
         self.handle = OpenProcess(access, False, pid)
-        if not self.handle:
+        if self.handle is None:
             report("OpenProcess failed.", uselog=uselog)
 
 class ThreadHandle(Handle):
     def __init__(self, access, tid, uselog):
-        super().__init__()
         self.handle = OpenThread(access, False, tid)
-        if not self.handle:
+        if self.handle is None:
             report("OpenThread failed.", uselog=uselog)
 
 class CreateSnapshot(Handle):
     def __init__(self, arg):
-        super().__init__()
         self.handle = CreateToolhelp32Snapshot(arg, DWORD(0))
         from module.device.platform.winapi.const_windows import INVALID_HANDLE_VALUE
         if self.handle == INVALID_HANDLE_VALUE:
