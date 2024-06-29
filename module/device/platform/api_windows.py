@@ -234,7 +234,7 @@ def get_cmdline(pid: int) -> str:
             cmdline = wstring_at(addressof(commandLine), len(commandLine))
     except OSError:
         return ''
-    return cmdline
+    return cmdline.replace(r"\\", "/").replace("\\", "/").replace('"', '"')
 
 
 def kill_process_by_regex(regex: str) -> int:
