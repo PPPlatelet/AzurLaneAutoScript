@@ -83,7 +83,7 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
         elif method == 'minimize':
             return api_windows.switch_window(self.hwnds, api_windows.SW_MINIMIZE)
         elif method == 'silent':
-            return True
+            return api_windows.switch_window(self.hwnds, api_windows.SW_HIDE)
         else:
             from module.exception import ScriptError
             raise ScriptError("Wrong setting")
