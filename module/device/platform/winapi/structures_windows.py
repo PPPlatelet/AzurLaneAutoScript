@@ -1,13 +1,22 @@
 from ctypes import POINTER, Structure
 from ctypes.wintypes import (
-    HANDLE, DWORD, WORD, LARGE_INTEGER, BYTE, BOOL, BOOLEAN,
-    USHORT, UINT, LONG, ULONG, CHAR, LPWSTR, LPVOID, MAX_PATH,
+    HANDLE, DWORD, WORD, BYTE, BOOL, USHORT,
+    UINT, LONG, CHAR, LPWSTR, LPVOID, MAX_PATH,
     RECT, PULONG, POINT, PWCHAR, FILETIME
 )
 
 class EmulatorLaunchFailedError(Exception): ...
 class HwndNotFoundError(Exception): ...
 class IterationFinished(Exception): ...
+
+# processthreadsapi.h line 28
+class PROCESS_INFORMATION(Structure):
+    _fields_ = [
+        ('hProcess',    HANDLE),
+        ('hThread',     HANDLE),
+        ('dwProcessId', DWORD),
+        ('dwThreadId',  DWORD)
+    ]
 
 class STARTUPINFOW(Structure):
     _fields_ = [
@@ -31,14 +40,7 @@ class STARTUPINFOW(Structure):
         ('hStdError',       HANDLE)
     ]
 
-class PROCESS_INFORMATION(Structure):
-    _fields_ = [
-        ('hProcess',    HANDLE),
-        ('hThread',     HANDLE),
-        ('dwProcessId', DWORD),
-        ('dwThreadId',  DWORD)
-    ]
-
+# minwinbase.h line 13
 class SECURITY_ATTRIBUTES(Structure):
     _fields_ = [
         ("nLength",                 DWORD),
@@ -46,6 +48,7 @@ class SECURITY_ATTRIBUTES(Structure):
         ("bInheritHandle",          BOOL)
     ]
 
+# tlhelp32.h line 62
 class PROCESSENTRY32(Structure):
     _fields_ = [
         ("dwSize",              DWORD),
@@ -71,6 +74,7 @@ class THREADENTRY32(Structure):
         ("dwFlags",             DWORD)
     ]
 
+# winuser.h line 1801
 class WINDOWPLACEMENT(Structure):
     _fields_ = [
         ("length",              UINT),
@@ -81,13 +85,8 @@ class WINDOWPLACEMENT(Structure):
         ("rcNormalPosition",    RECT)
     ]
 
-class LIST_ENTRY(Structure):
-    _fields_ = [
-        ("Flink", POINTER(LPVOID)),
-        ("Blink", POINTER(LPVOID))
-    ]
 
-# ntbasic.h line 111
+# winternl.h line 25
 class UNICODE_STRING(Structure):
     _fields_ = [
         ("Length",          USHORT),
@@ -95,147 +94,33 @@ class UNICODE_STRING(Structure):
         ("Buffer",          PWCHAR)
     ]
 
-# ntpsapi.h line 63
-class PEB_LDR_DATA(Structure):
-    _fields_ = [
-        ("Length",                          ULONG),
-        ("Initialized",                     BOOLEAN),
-        ("SsHandle",                        HANDLE),
-        ("InLoadOrderModuleList",           LIST_ENTRY),
-        ("InMemoryOrderModuleList",         LIST_ENTRY),
-        ("InInitializationOrderModuleList", LIST_ENTRY),
-        ("EntryInProgress",                 LPVOID),
-        ("ShutdownInProgress",              BOOLEAN),
-        ("ShutdownThreadId",                HANDLE)
-    ]
 
-# ntpebteb.h line 8
-class PEB(Structure):
-    _fields_ = [
-        ("InheritedAddressSpace",           BOOLEAN),
-        ("ReadImageFileExecOptions",        BOOLEAN),
-        ("BeingDebugged",                   BOOLEAN),
-        ("Spare",                           BOOLEAN),
-        ("Mutant",                          HANDLE),
-        ("ImageBaseAddress",                LPVOID),
-        ("Ldr",                             POINTER(PEB_LDR_DATA)),
-        ("ProcessParameters",               LPVOID),
-        ("SubSystemData",                   LPVOID),
-        ("ProcessHeap",                     LPVOID),
-        ("FastPebLock",                     LPVOID),
-        ("FastPebLockRoutine",              LPVOID),
-        ("FastPebUnlockRoutine",            LPVOID),
-        ("EnvironmentUpdateCount",          ULONG),
-        ("KernelCallbackTable",             LPVOID),
-        ("EventLogSection",                 LPVOID),
-        ("EventLog",                        LPVOID),
-        ("FreeList",                        LPVOID),
-        ("TlsExpansionCounter",             ULONG),
-        ("TlsBitmap",                       LPVOID),
-        ("TlsBitmapBits",                   ULONG * 2),
-        ("ReadOnlySharedMemoryBase",        LPVOID),
-        ("ReadOnlySharedMemoryHeap",        LPVOID),
-        ("ReadOnlyStaticServerData",        LPVOID),
-        ("AnsiCodePageData",                LPVOID),
-        ("OemCodePageData",                 LPVOID),
-        ("UnicodeCaseTableData",            LPVOID),
-        ("NumberOfProcessors",              ULONG),
-        ("NtGlobalFlag",                    ULONG),
-        ("Spare2",                          BYTE * 4),
-        ("CriticalSectionTimeout",          LARGE_INTEGER),
-        ("HeapSegmentReserve",              ULONG),
-        ("HeapSegmentCommit",               ULONG),
-        ("HeapDeCommitTotalFreeThreshold",  ULONG),
-        ("HeapDeCommitFreeBlockThreshold",  ULONG),
-        ("NumberOfHeaps",                   ULONG),
-        ("MaximumNumberOfHeaps",            ULONG),
-        ("ProcessHeaps",                    POINTER(LPVOID)),
-        ("GdiSharedHandleTable",            LPVOID),
-        ("ProcessStarterHelper",            LPVOID),
-        ("GdiDCAttributeList",              LPVOID),
-        ("LoaderLock",                      LPVOID),
-        ("OSMajorVersion",                  ULONG),
-        ("OSMinorVersion",                  ULONG),
-        ("OSBuildNumber",                   ULONG),
-        ("OSPlatformId",                    ULONG),
-        ("ImageSubSystem",                  ULONG),
-        ("ImageSubSystemMajorVersion",      ULONG),
-        ("ImageSubSystemMinorVersion",      ULONG),
-        ("GdiHandleBuffer",                 ULONG * 34),
-        ("PostProcessInitRoutine",          ULONG),
-        ("TlsExpansionBitmap",              ULONG),
-        ("TlsExpansionBitmapBits",          BYTE * 32),
-        ("SessionId",                       ULONG)
-    ]
-
-# ntrtl.h line 2320
-class CURDIR(Structure):
-    _fields_ = [
-        ("DosPath", UNICODE_STRING),
-        ("Handle",  HANDLE)
-    ]
-
-# ntrtl.h line 2329
-class RTL_DRIVE_LETTER_CURDIR(Structure):
-    _fields_ = [
-        ("Flags",       USHORT),
-        ("Length",      USHORT),
-        ("TimeStamp",   ULONG),
-        ("DosPath",     UNICODE_STRING)
-    ]
-
-# ntrtl.h line 2340
+# winternl.h line 54
 class RTL_USER_PROCESS_PARAMETERS(Structure):
     _fields_ = [
-        ("MaximumLength",           ULONG),
-        ("Length",                  ULONG),
+        ("Reserved",        LPVOID * 12),
+        ("ImagePathName",   UNICODE_STRING),
+        ("CommandLine",     UNICODE_STRING)
+    ]
 
-        ("Flags",                   ULONG),
-        ("DebugFlags",              ULONG),
-
-        ("ConsoleHandle",           LPVOID),
-        ("ConsoleFlags",            ULONG),
-        ("StandardInput",           LPVOID),
-        ("StandardOutput",          LPVOID),
-        ("StandardError",           LPVOID),
-
-        ("CurrentDirectory",        CURDIR),
-        ("DllPath",                 UNICODE_STRING),
-        ("ImagePathName",           UNICODE_STRING),
-        ("CommandLine",             UNICODE_STRING),
-        ("Environment",             LPVOID),
-
-        ("StartingX",               ULONG),
-        ("StartingY",               ULONG),
-        ("CountX",                  ULONG),
-        ("CountY",                  ULONG),
-        ("CountCharsX",             ULONG),
-        ("CountCharsY",             ULONG),
-        ("FillAttribute",           ULONG),
-
-        ("WindowFlags",             ULONG),
-        ("ShowWindowFlags",         ULONG),
-        ("WindowTitle",             UNICODE_STRING),
-        ("DesktopInfo",             UNICODE_STRING),
-        ("ShellInfo",               UNICODE_STRING),
-        ("RuntimeData",             UNICODE_STRING),
-        ("CurrentDirectories",      RTL_DRIVE_LETTER_CURDIR * 32),
-
-        ("EnvironmentSize",         ULONG),
-        ("EnvironmentVersion",      ULONG),
-        ("PackageDependencyData",   LPVOID),
-        ("ProcessGroupId",          ULONG),
-        ("LoaderThreads",           ULONG)
+class PEB(Structure):
+    _fields_ = [
+        ("Reserved",                BYTE * 28),
+        ("ProcessParameters",       POINTER(RTL_USER_PROCESS_PARAMETERS)),
     ]
 
 class PROCESS_BASIC_INFORMATION(Structure):
+    NTSTATUS    = LONG
+    KPRIORITY   = LONG
+    KAFFINITY   = PULONG
     _fields_ = [
-        ("Reserved1",       LPVOID),
-        ("PebBaseAddress",  POINTER(PEB)),
-        ("Reserved2",       LPVOID * 2),
-        ("UniqueProcessId", ULONG),
-        ("Reserved3",       LPVOID)
+        ("ExitStatus",                      NTSTATUS),
+        ("PebBaseAddress",                  POINTER(PEB)),
+        ("AffinityMask",                    KAFFINITY),
+        ("BasePriority",                    KPRIORITY),
+        ("UniqueProcessId",                 PULONG),
+        ("InheritedFromUniqueProcessId",    PULONG),
     ]
 
-def to_int(time: FILETIME):
-    return (time.dwHighDateTime << 32) + time.dwLowDateTime
+def to_int(filetime: FILETIME):
+    return (filetime.dwHighDateTime << 32) + filetime.dwLowDateTime
