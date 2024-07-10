@@ -19,7 +19,7 @@ class EmulatorStatus:
 
 class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
     def __execute(self, command: str, start: bool):
-        command = command.replace(r"\\", "/").replace("\\", "/").replace('"', '"')
+        command = api_windows.fstr(command)
         logger.info(f'Execute: {command}')
 
         if self.config.Emulator_SilentStart == 'normal':

@@ -1,18 +1,11 @@
-import re
-import xml.etree.ElementTree as Et
+import threading
+import asyncio
 
 from ctypes import byref, sizeof, create_unicode_buffer, wstring_at, addressof
 
 from module.device.platform.emulator_windows import Emulator, EmulatorInstance
 from module.device.platform.winapi import *
 from module.logger import logger
-
-
-def is_admin():
-    try:
-        return IsUserAnAdmin()
-    except:
-        return False
 
 
 def __yieldloop(entry32, snapshot, func: callable):
@@ -212,7 +205,6 @@ def execute(command: str, silentstart: bool, start: bool):
     """
     from shlex import split
     from os.path import dirname
-    import threading
     focusedwindow               = getfocusedwindow()
     if start:
         focus_thread = threading.Thread(target=flash_window, args=(focusedwindow, ))
@@ -280,37 +272,6 @@ def terminate_process(pid: int):
         if TerminateProcess(hProcess, 0) == 0:
             report("Failed to kill process.")
     return True
-
-
-def parse_event(event: str):
-    ns = {'ns': 'http://schemas.microsoft.com/win/2004/08/events/event'}
-    tree = Et.ElementTree(Et.fromstring(event))
-    time_created = tree.find('.//ns:TimeCreated', ns).attrib['SystemTime']
-    new_process_id = tree.find('.//ns:Data[@Name="NewProcessId"]', ns).text
-    new_process_name = tree.find('.//ns:Data[@Name="NewProcessName"]', ns).text
-    process_id = tree.find('.//ns:Data[@Name="ProcessId"]', ns).text
-    parent_process_name = tree.find('.//ns:Data[@Name="ParentProcessName"]', ns).text
-    return {
-        'TimeCreated': time_created,
-        'NewProcessId': new_process_id,
-        'NewProcessName': new_process_name,
-        'ProcessId': process_id,
-        'ParentProcessName': parent_process_name,
-    }
-
-
-def pids_manager(pid: int):
-    try:
-        if IsUserAnAdmin():
-            pass
-        else:
-            return
-    except:
-        return
-    with evt_query() as hevent:
-        events = _enum_events(hevent)
-        for content in events:
-            logger.info(parse_event(content))
 
 
 def get_hwnds(pid: int) -> list:
@@ -384,7 +345,7 @@ def get_cmdline(pid: int) -> str:
             cmdline = wstring_at(addressof(commandLine), len(commandLine))
     except OSError:
         return ''
-    return cmdline.replace(r"\\", "/").replace("\\", "/").replace('"', '"')
+    return fstr(cmdline)
 
 
 def kill_process_by_regex(regex: str) -> int:
@@ -529,26 +490,26 @@ def get_process(instance: EmulatorInstance):
         if not instance.path in cmdline:
             continue
         if instance == Emulator.MuMuPlayer12:
-            match = re.search(r'\d+$', cmdline)
+            match = re.search(r'-v\s*(\d+)', cmdline)
             if not match:
                 continue
-            if int(match.group()) != instance.MuMuPlayer12_id:
+            if int(match.group(1)) != instance.MuMuPlayer12_id:
                 continue
             processes.close()
             return _get_process(pid)
         elif instance == Emulator.LDPlayerFamily:
-            match = re.search(r'\d+$', cmdline)
+            match = re.search(r'index=\s*(\d+)', cmdline)
             if not match:
                 continue
-            if int(match.group()) != instance.LDPlayer_id:
+            if int(match.group(1)) != instance.LDPlayer_id:
                 continue
             processes.close()
             return _get_process(pid)
         else:
-            matchstr = re.search(fr'\b{instance.name}$', cmdline)
-            if not matchstr:
+            matchname = re.search(fr'{instance.name}(\s+|$)', cmdline)
+            if not matchname:
                 continue
-            if matchstr.group() != instance.name:
+            if matchname.group(0).strip() != instance.name:
                 continue
             processes.close()
             return _get_process(pid)
@@ -577,6 +538,53 @@ def switch_window(hwnds: list, arg: int = SW_SHOWNORMAL):
         ShowWindow(hwnd, arg)
     return True
 
+class ProcessManager:
+    def __init__(self, pid: int):
+        self.mainpid = pid
+        self.datas = []
+        self.lock = threading.Lock()
+        self.loop = asyncio.get_event_loop()
+        self.loop.create_task(self.listener())
+
+    async def listener(self):
+        # TODO 监听grab/kill事件
+        while True:
+            event = await self.get_event()
+            if event == "grab":
+                await self.grab_pids()
+            elif event == "kill":
+                await self.kill_pids()
+            await asyncio.sleep(1)
+
+    async def get_event(self):
+        # TODO 获取事件
+        await asyncio.sleep(1)
+        return "grab"
+
+    async def grab_pids(self, pid: int):
+        # TODO 获取data并建立启动链条
+        if not IsUserAnAdmin():
+            return
+        with evt_query() as hevent:
+            evttree = EventTree()
+            events = _enum_events(hevent)
+            for content in events:
+                data = evttree.parse_event(content)
+                with self.lock:
+                    self.datas.append(data)
+                if data.process_id == pid:
+                    break
+            self.datas = self.datas[::-1]
+
+    async def kill_pids(self):
+        # TODO 依据启动关系依序遍历杀死进程
+        with self.lock:
+            while self.pids:
+                pass
+
+    def start(self):
+        threading.Thread(target=self.loop.run_forever).start()
+
 if __name__ == '__main__':
     p = 1234
-    pids_manager(1234)
+    PM = ProcessManager(1234)

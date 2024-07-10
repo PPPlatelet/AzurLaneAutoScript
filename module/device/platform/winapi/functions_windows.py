@@ -1,4 +1,7 @@
 from abc import ABCMeta, abstractmethod
+from datetime import datetime
+import xml.etree.ElementTree as Et
+import re
 
 from ctypes import POINTER, WINFUNCTYPE, WinDLL, c_size_t
 from ctypes.wintypes import (
@@ -222,30 +225,52 @@ class QueryEvt(Handle):
     def _is_invalid_handle(self):
         return self._handle is None
 
-class EventTree:
-    class __Node:
-        def __init__(self, data=None, parent=None, children: list = None):
-            self.data = data
-            self.parent = parent
-            self.son = [] if children is None else children
+class Data:
+    def __init__(self, data: dict, time: datetime):
+        self.system_time: datetime  = time
+        self.new_process_id: int    = data.get("NewProcessId", 0)
+        self.new_process_name: str  = data.get("NewProcessName", '')
+        self.process_id: int        = data.get("ProcessId", 0)
+        self.process_name: str      = data.get("ParentProcessName", '')
 
-    def __init__(self):
-        self.root = None
+class Node:
+    def __init__(self, data: Data = None, parent: 'Node' = None, children: list = None):
+        self.data = data
+        self.parent = parent
+        self.children = [] if children is None else children
+
+class EventTree:
+    # TODO 建立启动链条
+    root: Node = None
+
+    @staticmethod
+    def parse_event(event: str):
+        ns              = {'ns': 'http://schemas.microsoft.com/win/2004/08/events/event'}
+        root            = Et.fromstring(event)
+        system_time_str = root.find('.//ns:TimeCreated', ns).attrib['SystemTime']
+        match           = re.match(r'(.*\.\d{6})\d?(Z)', system_time_str)
+        modifiedtime    = match.group(1) + match.group(2) if match else system_time_str
+        system_time     = datetime.strptime(modifiedtime, '%Y-%m-%dT%H:%M:%S.%f%z').astimezone()
+
+        fields          = ["NewProcessId", "NewProcessName", "ProcessId", "ParentProcessName"]
+        data            = {field: fstr(root.find(f'.//ns:Data[@Name="{field}"]', ns).text) for field in fields}
+
+        return Data(data, system_time)
 
     def add_parent(self, data):
         if self.root is None:
-            self.root = self.__Node(data)
-            return
-        node = self.__Node(data, children=[self.root, ])
+            self.root = Node(data)
+            return True
+        node = Node(data, children=[self.root, ])
         self.root.parent = node
         self.root = node
 
-    def add_son(self, data):
+    def add_children(self, data):
         if self.root is None:
-            self.root = self.__Node(data)
-            return
-        node = self.__Node(data, parent=self.root)
-        self.root.son.append(node)
+            self.root = Node(data)
+            return True
+        node = Node(data, parent=self.root)
+        self.root.children.append(node)
 
 
 def report(
@@ -282,6 +307,12 @@ def report(
         CloseHandle(handle)
     if raiseexcept:
         raise exception(message)
+
+def fstr(formatstr: str):
+    try:
+        return int(formatstr, 16)
+    except ValueError:
+        return formatstr.replace(r"\\", "/").replace("\\", "/").replace('"', '"')
 
 def open_process(access, pid, uselog=False):
     return ProcessHandle(access, pid, uselog=uselog)
