@@ -162,27 +162,29 @@ def setforegroundwindow(focusedwindow: tuple = ()) -> bool:
     return True
 
 
-def flash_window(focusedwindow: tuple, max_attempts: int = 5, interval: int = 1):
+def flash_window(focusedwindow: tuple, max_attempts: int = 10, interval: float = 0.5):
     from time import sleep
     attempts = 0
     failed = 0
 
     while attempts < max_attempts:
         currentwindow = getfocusedwindow()
+
         if not (focusedwindow[0] and currentwindow[0]):
             failed += 1
             if failed >= max_attempts:
                 report("Flash window failed.")
             sleep(interval)
             continue
+
         if focusedwindow[0] != currentwindow[0]:
             logger.info(f"Current window is {currentwindow[0]}, flash back to {focusedwindow[0]}")
             setforegroundwindow(focusedwindow)
             attempts += 1
-            sleep(interval)
-        else:
-            attempts += 1
-            sleep(interval)
+            continue
+
+        attempts += 1
+        sleep(interval)
 
 
 def execute(command: str, silentstart: bool, start: bool):
@@ -539,15 +541,18 @@ def switch_window(hwnds: list, arg: int = SW_SHOWNORMAL):
     return True
 
 class ProcessManager:
+    # TODO UNDER DEVELOPMENT!!!!!! DO NOT USE!!!!
     def __init__(self, pid: int):
         self.mainpid = pid
         self.datas = []
+        self.pids = []
+        self.evttree = EventTree()
         self.lock = threading.Lock()
         self.loop = asyncio.get_event_loop()
         self.loop.create_task(self.listener())
 
     async def listener(self):
-        # TODO 监听grab/kill事件
+        # TODO listening grab/kill event
         while True:
             event = await self.get_event()
             if event == "grab":
@@ -557,28 +562,42 @@ class ProcessManager:
             await asyncio.sleep(1)
 
     async def get_event(self):
-        # TODO 获取事件
+        # TODO get event
         await asyncio.sleep(1)
         return "grab"
 
     async def grab_pids(self, pid: int):
-        # TODO 获取data并建立启动链条
         if not IsUserAnAdmin():
             return
         with evt_query() as hevent:
-            evttree = EventTree()
             events = _enum_events(hevent)
             for content in events:
-                data = evttree.parse_event(content)
+                data = self.evttree.parse_event(content)
                 with self.lock:
                     self.datas.append(data)
                 if data.process_id == pid:
                     break
             self.datas = self.datas[::-1]
+            await self.filltree()
+
+    async def filltree(self):
+        self.evttree.root = Node(self.datas[0])
+        for data in self.datas[1::]:
+            evtiter = self.evttree.pre_traversal(self.evttree.root)
+            for node in evtiter:
+                if data != node.data:
+                    continue
+                cmdline = get_cmdline(data.process_id)
+                if data.process_name not in cmdline:
+                    continue
+                node.add_children(data)
 
     async def kill_pids(self):
-        # TODO 依据启动关系依序遍历杀死进程
+        # TODO kill process by enumerating tree
         with self.lock:
+            evtiter = self.evttree.post_traversal(self.evttree.root)
+            for node in evtiter:
+                terminate_process(node.data.process_id)
             while self.pids:
                 pass
 

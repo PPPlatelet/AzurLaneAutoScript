@@ -226,6 +226,7 @@ class QueryEvt(Handle):
         return self._handle is None
 
 class Data:
+    # TODO UNDER DEVELOPMENT!!!!!! DO NOT USE!!!!
     def __init__(self, data: dict, time: datetime):
         self.system_time: datetime  = time
         self.new_process_id: int    = data.get("NewProcessId", 0)
@@ -233,14 +234,28 @@ class Data:
         self.process_id: int        = data.get("ProcessId", 0)
         self.process_name: str      = data.get("ParentProcessName", '')
 
+    def __eq__(self, other: 'Data'):
+        if isinstance(other, Data):
+            return self.process_id == other.new_process_id
+        return NotImplemented
+
 class Node:
-    def __init__(self, data: Data = None, parent: 'Node' = None, children: list = None):
+    # TODO UNDER DEVELOPMENT!!!!!! DO NOT USE!!!!
+    def __init__(self, data: Data = None):
         self.data = data
-        self.parent = parent
-        self.children = [] if children is None else children
+        self.children = []
+
+    def __del__(self):
+        if self.data is not None:
+            del self.data
+        if self.children:
+            del self.children
+
+    def add_children(self, data):
+        self.children.append(Node(data))
 
 class EventTree:
-    # TODO 建立启动链条
+    # TODO UNDER DEVELOPMENT!!!!!! DO NOT USE!!!!
     root: Node = None
 
     @staticmethod
@@ -257,21 +272,21 @@ class EventTree:
 
         return Data(data, system_time)
 
-    def add_parent(self, data):
-        if self.root is None:
-            self.root = Node(data)
-            return True
-        node = Node(data, children=[self.root, ])
-        self.root.parent = node
-        self.root = node
+    def pre_traversal(self, node: Node = None):
+        if node is not None:
+            yield node
+            for child in node.children:
+                yield from self.pre_traversal(child)
 
-    def add_children(self, data):
-        if self.root is None:
-            self.root = Node(data)
-            return True
-        node = Node(data, parent=self.root)
-        self.root.children.append(node)
+    def post_traversal(self, node: Node = None):
+        if node is not None:
+            for child in node.children:
+                yield from self.post_traversal(child)
+            yield node
 
+    def delete_tree(self):
+        del self.root
+        self.root = None
 
 def report(
         msg: str            = '',
