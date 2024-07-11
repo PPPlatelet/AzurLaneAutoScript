@@ -12,25 +12,34 @@ class EmulatorUnknown(Exception):
 
 
 class EmulatorStatus:
-    process: tuple = None
-    hwnds: list = None
-    focusedwindow: tuple = None
+    process: tuple          = ()
+    hwnds: list             = []
+    focusedwindow: tuple    = ()
 
 
 class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
-    def execute(self, command: str):
-        command = command.replace(r"\\", "/").replace("\\", "/").replace('"', '"')
+    def __execute(self, command: str, start: bool):
+        command = api_windows.fstr(command)
         logger.info(f'Execute: {command}')
+
         if self.config.Emulator_SilentStart == 'normal':
-            sstart = False
+            silentstart = False
         else:
-            sstart = True
-        if self.process is not None:
+            silentstart = True
+
+        if self.process:
             if self.process[0] is not None and self.process[1] is not None:
                 self.CloseHandle(self.process[:2])
-        self.process, self.focusedwindow = api_windows.execute(command, sstart)
-        logger.info(f"Current window: {self.focusedwindow[0]}")
+                self.process = ()
+
+        self.process, self.focusedwindow = api_windows.execute(command, silentstart, start)
         return True
+
+    def _start(self, command: str):
+        self.__execute(command, start=True)
+
+    def _stop(self, command: str):
+        self.__execute(command, start=False)
 
     @staticmethod
     def CloseHandle(*args, **kwargs):
@@ -73,9 +82,9 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
         return api_windows.get_cmdline(pid)
 
     def switch_window(self):
-        if self.process is None:
+        if not self.process:
             self.process = self.get_process(self.emulator_instance)
-        if self.hwnds is None:
+        if not self.hwnds:
             self.hwnds = self.get_hwnds(self.process[2])
         method = self.config.Emulator_SilentStart
         if method == 'normal':
@@ -95,30 +104,30 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
         exe: str = instance.emulator.path
         if instance == Emulator.MuMuPlayer:
             # NemuPlayer.exe
-            self.execute(exe)
+            self._start(exe)
         elif instance == Emulator.MuMuPlayerX:
             # NemuPlayer.exe -m nemu-12.0-x64-default
-            self.execute(f'"{exe}" -m {instance.name}')
+            self._start(f'"{exe}" -m {instance.name}')
         elif instance == Emulator.MuMuPlayer12:
             # MuMuPlayer.exe -v 0
             if instance.MuMuPlayer12_id is None:
                 logger.warning(f'Cannot get MuMu instance index from name {instance.name}')
-            self.execute(f'"{exe}" -v {instance.MuMuPlayer12_id}')
+            self._start(f'"{exe}" -v {instance.MuMuPlayer12_id}')
         elif instance == Emulator.LDPlayerFamily:
             # LDPlayer.exe index=0
-            self.execute(f'"{exe}" index={instance.LDPlayer_id}')
+            self._start(f'"{exe}" index={instance.LDPlayer_id}')
         elif instance == Emulator.NoxPlayerFamily:
             # Nox.exe -clone:Nox_1
-            self.execute(f'"{exe}" -clone:{instance.name}')
+            self._start(f'"{exe}" -clone:{instance.name}')
         elif instance == Emulator.BlueStacks5:
             # HD-Player.exe -instance Pie64
-            self.execute(f'"{exe}" -instance {instance.name}')
+            self._start(f'"{exe}" -instance {instance.name}')
         elif instance == Emulator.BlueStacks4:
             # Bluestacks.exe -vmname Android_1
-            self.execute(f'"{exe}" -vmname {instance.name}')
+            self._start(f'"{exe}" -vmname {instance.name}')
         elif instance == Emulator.MEmuPlayer:
             # MEmu.exe MEmu_0
-            self.execute(f'"{exe}" {instance.name}')
+            self._start(f'"{exe}" {instance.name}')
         else:
             raise EmulatorUnknown(f'Cannot start an unknown emulator instance: {instance}')
 
@@ -159,13 +168,13 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
             # E:\Program Files\Netease\MuMu Player 12\shell\MuMuManager.exe api -v 1 shutdown_player
             if instance.MuMuPlayer12_id is None:
                 logger.warning(f'Cannot get MuMu instance index from name {instance.name}')
-            self.execute(f'"{Emulator.single_to_console(exe)}" api -v {instance.MuMuPlayer12_id} shutdown_player')
+            self._stop(f'"{Emulator.single_to_console(exe)}" api -v {instance.MuMuPlayer12_id} shutdown_player')
         elif instance == Emulator.LDPlayerFamily:
             # E:\Program Files\leidian\LDPlayer9\dnconsole.exe quit --index 0
-            self.execute(f'"{Emulator.single_to_console(exe)}" quit --index {instance.LDPlayer_id}')
+            self._stop(f'"{Emulator.single_to_console(exe)}" quit --index {instance.LDPlayer_id}')
         elif instance == Emulator.NoxPlayerFamily:
             # Nox.exe -clone:Nox_1 -quit
-            self.execute(f'"{exe}" -clone:{instance.name} -quit')
+            self._stop(f'"{exe}" -clone:{instance.name} -quit')
         elif instance == Emulator.BlueStacks5:
             # BlueStack has 2 processes
             # C:\Program Files\BlueStacks_nxt_cn\HD-Player.exe --instance Pie64
@@ -177,10 +186,10 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
             )
         elif instance == Emulator.BlueStacks4:
             # E:\Program Files (x86)\BluestacksCN\bsconsole.exe quit --name Android
-            self.execute(f'"{Emulator.single_to_console(exe)}" quit --name {instance.name}')
+            self._stop(f'"{Emulator.single_to_console(exe)}" quit --name {instance.name}')
         elif instance == Emulator.MEmuPlayer:
             # F:\Program Files\Microvirt\MEmu\memuc.exe stop -n MEmu_0
-            self.execute(f'"{Emulator.single_to_console(exe)}" stop -n {instance.name}')
+            self._stop(f'"{Emulator.single_to_console(exe)}" stop -n {instance.name}')
         else:
             raise EmulatorUnknown(f'Cannot stop an unknown emulator instance: {instance}')
 
@@ -215,6 +224,7 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
                 False if timeout
         """
         logger.info("Emulator starting...")
+        logger.info(f"Current window: {self.focusedwindow[0]}")
         serial = self.emulator_instance.serial
 
         def adb_connect():
@@ -250,16 +260,6 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
             if timeout.reached():
                 logger.warning(f'Emulator start timeout')
                 return False
-
-            # Flash window
-            currentwindow = self.getfocusedwindow()
-            if (
-                self.focusedwindow is not None and
-                currentwindow is not None and
-                self.focusedwindow[0] != currentwindow[0]
-            ):
-                logger.info(f"Current window is {currentwindow[0]}, flash back to {self.focusedwindow[0]}")
-                self.setforegroundwindow(self.focusedwindow)
 
             # Check device connection
             devices = self.list_device().select(serial=serial)
@@ -343,20 +343,25 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
 
     def emulator_check(self):
         try:
-            if self.process is None:
+            if not self.process:
                 self.process = self.get_process(self.emulator_instance)
                 return True
             cmdline = self.get_cmdline(self.process[2])
             if self.emulator_instance.path in cmdline:
                 return True
             else:
-                self.process = self.get_process(self.emulator_instance)
-                return True
-        except api_windows.IterationFinished as e:
+                if self.process[0] is not None and self.process[1] is not None:
+                    self.CloseHandle(self.process[:2])
+                    self.process = ()
+                raise ProcessLookupError
+        except api_windows.IterationFinished:
             return False
         except IndexError:
             return False
+        except ProcessLookupError:
+            return self.emulator_check()
         except OSError as e:
+            logger.error(e)
             raise
         except Exception as e:
             logger.error(e)
