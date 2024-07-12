@@ -11,13 +11,11 @@ class EmulatorUnknown(Exception):
     pass
 
 
-class EmulatorStatus:
+class PlatformWindows(PlatformBase, EmulatorManager):
     process: tuple          = ()
     hwnds: list             = []
     focusedwindow: tuple    = ()
 
-
-class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
     def __execute(self, command: str, start: bool):
         command = api_windows.fstr(command)
         logger.info(f'Execute: {command}')

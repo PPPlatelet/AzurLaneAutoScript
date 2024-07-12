@@ -122,7 +122,6 @@ def _enum_events(hevent):
 
         EvtClose(event)
 
-
 def getfocusedwindow():
     """
     Get focused window.
@@ -162,7 +161,7 @@ def setforegroundwindow(focusedwindow: tuple = ()) -> bool:
     return True
 
 
-def flash_window(focusedwindow: tuple, max_attempts: int = 10, interval: float = 0.5):
+def refresh_window(focusedwindow: tuple, max_attempts: int = 10, interval: float = 0.5):
     from time import sleep
     attempts = 0
     failed = 0
@@ -181,10 +180,19 @@ def flash_window(focusedwindow: tuple, max_attempts: int = 10, interval: float =
             logger.info(f"Current window is {currentwindow[0]}, flash back to {focusedwindow[0]}")
             setforegroundwindow(focusedwindow)
             attempts += 1
+            sleep(interval)
+
+        newwindow = getfocusedwindow()
+
+        if not newwindow[0]:
+            failed += 1
+            if failed >= max_attempts:
+                report("Flash window failed.")
+            sleep(interval)
             continue
 
-        attempts += 1
-        sleep(interval)
+        if newwindow[0] != currentwindow[0] and newwindow[0] != focusedwindow[0]:
+            break
 
 
 def execute(command: str, silentstart: bool, start: bool):
@@ -209,7 +217,7 @@ def execute(command: str, silentstart: bool, start: bool):
     from os.path import dirname
     focusedwindow               = getfocusedwindow()
     if start:
-        focus_thread = threading.Thread(target=flash_window, args=(focusedwindow, ))
+        focus_thread = threading.Thread(target=refresh_window, args=(focusedwindow,))
         focus_thread.start()
 
     lpApplicationName           = split(command)[0]
@@ -541,7 +549,7 @@ def switch_window(hwnds: list, arg: int = SW_SHOWNORMAL):
     return True
 
 class ProcessManager:
-    # TODO UNDER DEVELOPMENT!!!!!! DO NOT USE!!!!
+    # TODO:UNDER DEVELOPMENT!!!!!! DO NOT USE!!!!
     def __init__(self, pid: int):
         self.mainpid = pid
         self.datas = []
@@ -552,7 +560,7 @@ class ProcessManager:
         self.loop.create_task(self.listener())
 
     async def listener(self):
-        # TODO listening grab/kill event
+        # TODO:listening grab/kill event
         while True:
             event = await self.get_event()
             if event == "grab":
@@ -562,7 +570,7 @@ class ProcessManager:
             await asyncio.sleep(1)
 
     async def get_event(self):
-        # TODO get event
+        # TODO:get event
         await asyncio.sleep(1)
         return "grab"
 
@@ -593,7 +601,7 @@ class ProcessManager:
                 node.add_children(data)
 
     async def kill_pids(self):
-        # TODO kill process by enumerating tree
+        # TODO:kill process by enumerating tree
         with self.lock:
             evtiter = self.evttree.post_traversal(self.evttree.root)
             for node in evtiter:

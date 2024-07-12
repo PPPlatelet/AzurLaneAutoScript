@@ -85,7 +85,6 @@ class WINDOWPLACEMENT(Structure):
         ("rcNormalPosition",    RECT)
     ]
 
-
 # winternl.h line 25
 class UNICODE_STRING(Structure):
     _fields_ = [
@@ -93,7 +92,6 @@ class UNICODE_STRING(Structure):
         ("MaximumLength",   USHORT),
         ("Buffer",          PWCHAR)
     ]
-
 
 # winternl.h line 54
 class RTL_USER_PROCESS_PARAMETERS(Structure):
