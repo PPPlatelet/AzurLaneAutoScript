@@ -1,5 +1,5 @@
 import threading
-import asyncio
+import re
 
 from ctypes import byref, sizeof, create_unicode_buffer, wstring_at, addressof
 
@@ -73,56 +73,6 @@ def _enum_threads():
         yield from __yieldloop(lpte32, snapshot, Thread32Next)
 
 
-def _enum_events(hevent):
-    event = EVT_HANDLE()
-    returned = DWORD(0)
-    while EvtNext(hevent, 1, byref(event), INFINITE, 0, byref(returned)):
-        if event == INVALID_HANDLE_VALUE:
-            report(f"Invalid handle: 0x{event}", raiseexcept=False)
-            continue
-
-        buffer_size = DWORD(0)
-        buffer_used = DWORD(0)
-        property_count = DWORD(0)
-        rendered_content = None
-
-        EvtRender(
-            None,
-            event,
-            EVT_RENDER_EVENT_XML,
-            buffer_size,
-            rendered_content,
-            byref(buffer_used),
-            byref(property_count)
-        )
-        if GetLastError() == ERROR_SUCCESS:
-            yield rendered_content
-            continue
-
-        buffer_size = buffer_used.value
-        rendered_content = create_unicode_buffer(buffer_size)
-        if not rendered_content:
-            report("malloc failed.", raiseexcept=False)
-            continue
-
-        if not EvtRender(
-            None,
-            event,
-            EVT_RENDER_EVENT_XML,
-            buffer_size,
-            rendered_content,
-            byref(buffer_used),
-            byref(property_count)
-        ):
-            report(f"EvtRender failed with {GetLastError()}", raiseexcept=False)
-            continue
-
-        if GetLastError() == ERROR_SUCCESS:
-            yield rendered_content.value
-
-        EvtClose(event)
-
-
 def getfocusedwindow():
     """
     Get focused window.
@@ -162,7 +112,8 @@ def setforegroundwindow(focusedwindow: tuple = ()) -> bool:
     return True
 
 
-def flash_window(focusedwindow: tuple, max_attempts: int = 10, interval: float = 0.5):
+def refresh_window(focusedwindow: tuple, max_attempts: int = 10, interval: float = 0.5):
+    # TODO:Something error to fix.
     from time import sleep
     attempts = 0
     failed = 0
@@ -181,13 +132,26 @@ def flash_window(focusedwindow: tuple, max_attempts: int = 10, interval: float =
             logger.info(f"Current window is {currentwindow[0]}, flash back to {focusedwindow[0]}")
             setforegroundwindow(focusedwindow)
             attempts += 1
+            sleep(interval)
+
+        newwindow = getfocusedwindow()
+
+        if not newwindow[0]:
+            failed += 1
+            if failed >= max_attempts:
+                report("Flash window failed.")
+            sleep(interval)
             continue
+
+        if newwindow[0] != currentwindow[0] and newwindow[0] != focusedwindow[0]:
+            break
 
         attempts += 1
         sleep(interval)
 
 
 def execute(command: str, silentstart: bool, start: bool):
+    # TODO:Create Process with non-administrator privileges
     """
     Create a new process.
 
@@ -209,7 +173,7 @@ def execute(command: str, silentstart: bool, start: bool):
     from os.path import dirname
     focusedwindow               = getfocusedwindow()
     if start:
-        focus_thread = threading.Thread(target=flash_window, args=(focusedwindow, ))
+        focus_thread = threading.Thread(target=refresh_window, args=(focusedwindow,))
         focus_thread.start()
 
     lpApplicationName           = split(command)[0]
@@ -381,6 +345,37 @@ def kill_process_by_regex(regex: str) -> int:
         return count
 
 
+def __get_creation_time(fopen, fgettime, access, identification):
+    with fopen(access, identification, uselog=False, raiseexcept=False) as handle:
+        creationtime    = FILETIME()
+        exittime        = FILETIME()
+        kerneltime      = FILETIME()
+        usertime        = FILETIME()
+        if not fgettime(
+            handle,
+            byref(creationtime),
+            byref(exittime),
+            byref(kerneltime),
+            byref(usertime)
+        ):
+            return None
+        return to_int(creationtime)
+
+def _get_process_creation_time(pid: int):
+    """
+    Get thread's creation time.
+
+    Args:
+        pid (int): Process id
+
+    Returns:
+        threadstarttime (int): Thread's start time
+
+    Raises:
+        OSError if OpenThread failed.
+    """
+    return __get_creation_time(open_process, GetProcessTimes, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, pid)
+
 def _get_thread_creation_time(tid: int):
     """
     Get thread's creation time.
@@ -394,20 +389,8 @@ def _get_thread_creation_time(tid: int):
     Raises:
         OSError if OpenThread failed.
     """
-    with open_thread(THREAD_QUERY_INFORMATION, tid) as hThread:
-        creationtime    = FILETIME()
-        exittime        = FILETIME()
-        kerneltime      = FILETIME()
-        usertime        = FILETIME()
-        if not GetThreadTimes(
-            hThread,
-            byref(creationtime),
-            byref(exittime),
-            byref(kerneltime),
-            byref(usertime)
-        ):
-            return None
-        return to_int(creationtime)
+    return __get_creation_time(open_thread, GetThreadTimes, THREAD_QUERY_INFORMATION, tid)
+
 
 def get_thread(pid: int):
     """
@@ -539,71 +522,3 @@ def switch_window(hwnds: list, arg: int = SW_SHOWNORMAL):
             continue
         ShowWindow(hwnd, arg)
     return True
-
-class ProcessManager:
-    # TODO UNDER DEVELOPMENT!!!!!! DO NOT USE!!!!
-    def __init__(self, pid: int):
-        self.mainpid = pid
-        self.datas = []
-        self.pids = []
-        self.evttree = EventTree()
-        self.lock = threading.Lock()
-        self.loop = asyncio.get_event_loop()
-        self.loop.create_task(self.listener())
-
-    async def listener(self):
-        # TODO listening grab/kill event
-        while True:
-            event = await self.get_event()
-            if event == "grab":
-                await self.grab_pids()
-            elif event == "kill":
-                await self.kill_pids()
-            await asyncio.sleep(1)
-
-    async def get_event(self):
-        # TODO get event
-        await asyncio.sleep(1)
-        return "grab"
-
-    async def grab_pids(self, pid: int):
-        if not IsUserAnAdmin():
-            return
-        with evt_query() as hevent:
-            events = _enum_events(hevent)
-            for content in events:
-                data = self.evttree.parse_event(content)
-                with self.lock:
-                    self.datas.append(data)
-                if data.process_id == pid:
-                    break
-            self.datas = self.datas[::-1]
-            await self.filltree()
-
-    async def filltree(self):
-        self.evttree.root = Node(self.datas[0])
-        for data in self.datas[1::]:
-            evtiter = self.evttree.pre_traversal(self.evttree.root)
-            for node in evtiter:
-                if data != node.data:
-                    continue
-                cmdline = get_cmdline(data.process_id)
-                if data.process_name not in cmdline:
-                    continue
-                node.add_children(data)
-
-    async def kill_pids(self):
-        # TODO kill process by enumerating tree
-        with self.lock:
-            evtiter = self.evttree.post_traversal(self.evttree.root)
-            for node in evtiter:
-                terminate_process(node.data.process_id)
-            while self.pids:
-                pass
-
-    def start(self):
-        threading.Thread(target=self.loop.run_forever).start()
-
-if __name__ == '__main__':
-    p = 1234
-    PM = ProcessManager(1234)
