@@ -16,7 +16,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
     hwnds: list             = []
     focusedwindow: tuple    = ()
     
-    def __execute(self, command: str, start: bool):
+    def __execute(self, command: str, start: bool) -> bool:
         command = api_windows.fstr(command)
         logger.info(f'Execute: {command}')
 
@@ -27,44 +27,28 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
         if self.process:
             if self.process[0] is not None and self.process[1] is not None:
-                self.CloseHandle(self.process[:2])
+                api_windows.CloseHandle(self.process[:2])
                 self.process = ()
 
         self.process, self.focusedwindow = api_windows.execute(command, silentstart, start)
         return True
 
-    def _start(self, command: str):
+    def _start(self, command: str) -> bool:
         return self.__execute(command, start=True)
 
-    def _stop(self, command: str):
+    def _stop(self, command: str) -> bool:
         return self.__execute(command, start=False)
-
-    @staticmethod
-    def CloseHandle(*args, **kwargs):
-        for handle in args:
-            if isinstance(handle, tuple):
-                for h in handle:
-                    api_windows.CloseHandle(h)
-            else:
-                api_windows.CloseHandle(handle)
-        for _, handle in kwargs.items():
-            if isinstance(handle, tuple):
-                for h in handle:
-                    api_windows.CloseHandle(h)
-            else:
-                api_windows.CloseHandle(handle)
-        return True
 
     @staticmethod
     def kill_process_by_regex(regex: str) -> int:
         return api_windows.kill_process_by_regex(regex)
 
     @staticmethod
-    def getfocusedwindow():
+    def getfocusedwindow() -> tuple:
         return api_windows.getfocusedwindow()
     
     @staticmethod
-    def setforegroundwindow(focusedwindow: tuple):
+    def setforegroundwindow(focusedwindow: tuple) -> bool:
         return api_windows.setforegroundwindow(focusedwindow)
 
     @staticmethod
@@ -72,14 +56,14 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         return api_windows.get_hwnds(pid)
 
     @staticmethod
-    def get_process(instance: EmulatorInstance):
+    def get_process(instance: EmulatorInstance) -> tuple:
         return api_windows.get_process(instance)
     
     @staticmethod
-    def get_cmdline(pid: int):
+    def get_cmdline(pid: int) -> str:
         return api_windows.get_cmdline(pid)
 
-    def switch_window(self):
+    def switch_window(self) -> bool:
         if not self.process:
             self.process = self.get_process(self.emulator_instance)
         if not self.hwnds:
@@ -339,7 +323,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         logger.error('Failed to stop emulator 3 times, stopped')
         return False
 
-    def emulator_check(self):
+    def emulator_check(self) -> bool:
         try:
             if not self.process:
                 self.process = self.get_process(self.emulator_instance)
@@ -349,7 +333,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 return True
             else:
                 if self.process[0] is not None and self.process[1] is not None:
-                    self.CloseHandle(self.process[:2])
+                    api_windows.CloseHandle(self.process[:2])
                     self.process = ()
                 raise ProcessLookupError
         except api_windows.IterationFinished:

@@ -8,7 +8,31 @@ from module.device.platform.winapi import *
 from module.logger import logger
 
 
-def __yieldloop(entry32, snapshot, func: callable):
+def CloseHandle(*args, **kwargs) -> bool:
+    """
+    Args:
+        *args:
+        **kwargs:
+
+    Returns:
+        bool:
+    """
+    for handle in args:
+        if isinstance(handle, tuple):
+            for h in handle:
+                functions_windows.CloseHandle(h)
+        else:
+            functions_windows.CloseHandle(handle)
+    for _, handle in kwargs.items():
+        if isinstance(handle, tuple):
+            for h in handle:
+                functions_windows.CloseHandle(h)
+        else:
+            functions_windows.CloseHandle(handle)
+    return True
+
+
+def __yield_entries(entry32, snapshot, func: callable) -> t.Generator:
     """
     Generates a loop that yields entries from a snapshot until the function fails or finishes.
 
@@ -35,7 +59,7 @@ def __yieldloop(entry32, snapshot, func: callable):
         report("Finished querying.", statuscode=errorcode, uselog=False, exception=IterationFinished)
 
 
-def _enum_processes():
+def _enum_processes() -> t.Generator:
     """
     Enumerates all the processes currently running on the system.
 
@@ -51,10 +75,10 @@ def _enum_processes():
     with create_snapshot(TH32CS_SNAPPROCESS) as snapshot:
         if not Process32First(snapshot, byref(lppe32)):
             report("Process32First failed.")
-        yield from __yieldloop(lppe32, snapshot, Process32Next)
+        yield from __yield_entries(lppe32, snapshot, Process32Next)
 
 
-def _enum_threads():
+def _enum_threads() -> t.Generator:
     """
     Enumerates all the threads currintly running on the system.
 
@@ -70,10 +94,10 @@ def _enum_threads():
     with create_snapshot(TH32CS_SNAPTHREAD) as snapshot:
         if not Thread32First(snapshot, byref(lpte32)):
             report("Thread32First failed.")
-        yield from __yieldloop(lpte32, snapshot, Thread32Next)
+        yield from __yield_entries(lpte32, snapshot, Thread32Next)
 
 
-def getfocusedwindow():
+def getfocusedwindow() -> tuple:
     """
     Get focused window.
 
@@ -92,18 +116,16 @@ def getfocusedwindow():
         report("Failed to get windowplacement.", level=30, raiseexcept=False)
         return hwnd, None
 
-def setforegroundwindow(focusedwindow: tuple = ()) -> bool:
+def setforegroundwindow(focusedwindow: tuple) -> bool:
     """
     Refocus foreground window.
 
     Args:
-        focusedwindow: tuple(hwnd, WINDOWPLACEMENT) | tuple(hwnd, None)
+        focusedwindow (tuple(hwnd, WINDOWPLACEMENT) or tuple(hwnd, None)):
 
     Returns:
         bool:
     """
-    if not focusedwindow:
-        return False
     SetForegroundWindow(focusedwindow[0])
     if focusedwindow[1] is None:
         ShowWindow(focusedwindow[0], SW_SHOWNORMAL)
@@ -112,8 +134,19 @@ def setforegroundwindow(focusedwindow: tuple = ()) -> bool:
     return True
 
 
-def refresh_window(focusedwindow: tuple, max_attempts: int = 10, interval: float = 0.5):
+def refresh_window(focusedwindow: tuple, max_attempts: int = 10, interval: float = 0.5) -> None:
     # TODO:Something error to fix.
+    """
+    Try to refresh window if previous window was out of focus.
+
+    Args:
+        focusedwindow (tuple): Previous focused window
+        max_attempts (int):
+        interval (float):
+
+    Returns:
+
+    """
     from time import sleep
     attempts = 0
     failed = 0
@@ -150,7 +183,7 @@ def refresh_window(focusedwindow: tuple, max_attempts: int = 10, interval: float
         sleep(interval)
 
 
-def execute(command: str, silentstart: bool, start: bool):
+def execute(command: str, silentstart: bool, start: bool) -> tuple:
     # TODO:Create Process with non-administrator privileges
     """
     Create a new process.
@@ -215,16 +248,21 @@ def execute(command: str, silentstart: bool, start: bool):
     if not success:
         report("Failed to start emulator.", exception=EmulatorLaunchFailedError)
 
-    process = (
-        lpProcessInformation.hProcess,
-        lpProcessInformation.hThread,
-        lpProcessInformation.dwProcessId,
-        lpProcessInformation.dwThreadId
-    )
+    if start:
+        process = (
+            lpProcessInformation.hProcess,
+            lpProcessInformation.hThread,
+            lpProcessInformation.dwProcessId,
+            lpProcessInformation.dwThreadId
+        )
+    else:
+        CloseHandle(lpProcessInformation.hProcess, lpProcessInformation.hThread)
+        process = ()
+
     return process, focusedwindow
 
 
-def terminate_process(pid: int):
+def terminate_process(pid: int) -> bool:
     """
     Terminate emulator process.
 
@@ -242,7 +280,7 @@ def terminate_process(pid: int):
 
 def get_hwnds(pid: int) -> list:
     """
-    Get process's window hwnds from this processid.
+    Get window hwnds of the process by its ID.
 
     Args:
         pid (int): Emulator's pid
@@ -274,7 +312,7 @@ def get_hwnds(pid: int) -> list:
 
 def get_cmdline(pid: int) -> str:
     """
-    Get a process's command line from this processid.
+    Get command line of the process by its ID.
 
     Args:
         pid (int): Emulator's pid
@@ -345,7 +383,17 @@ def kill_process_by_regex(regex: str) -> int:
         return count
 
 
-def __get_creation_time(fopen, fgettime, access, identification):
+def __get_creation_time(fopen: callable, fgettime: callable, access: int, identification: int) -> t.Optional[int]:
+    """
+    Args:
+        fopen (callable):
+        fgettime (callable):
+        access (int):
+        identification (int):
+
+    Returns:
+        int: creation time
+    """
     with fopen(access, identification, uselog=False, raiseexcept=False) as handle:
         creationtime    = FILETIME()
         exittime        = FILETIME()
@@ -361,9 +409,9 @@ def __get_creation_time(fopen, fgettime, access, identification):
             return None
         return to_int(creationtime)
 
-def _get_process_creation_time(pid: int):
+def _get_process_creation_time(pid: int) -> t.Optional[int]:
     """
-    Get thread's creation time.
+    Get creation time of the process by its ID.
 
     Args:
         pid (int): Process id
@@ -372,13 +420,13 @@ def _get_process_creation_time(pid: int):
         threadstarttime (int): Thread's start time
 
     Raises:
-        OSError if OpenThread failed.
+        OSError if OpenProcess failed.
     """
     return __get_creation_time(open_process, GetProcessTimes, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, pid)
 
-def _get_thread_creation_time(tid: int):
+def _get_thread_creation_time(tid: int) -> t.Optional[int]:
     """
-    Get thread's creation time.
+    Get creation time of the thread by its ID.
 
     Args:
         tid (int): Thread id
@@ -392,9 +440,9 @@ def _get_thread_creation_time(tid: int):
     return __get_creation_time(open_thread, GetThreadTimes, THREAD_QUERY_INFORMATION, tid)
 
 
-def get_thread(pid: int):
+def get_thread(pid: int) -> int:
     """
-    Get process's main thread id.
+    Get the main thread ID of the process by its ID.
 
     Args:
         pid (int): Emulator's pid
@@ -426,7 +474,7 @@ def get_thread(pid: int):
         return mainthreadid
 
 
-def _get_process(pid: int):
+def _get_process(pid: int) -> tuple:
     """
     Get emulator's handle.
 
@@ -453,7 +501,7 @@ def _get_process(pid: int):
         logger.warning(f"Failed to get process and thread handles: {e}")
         return None, None, pid, tid
 
-def get_process(instance: EmulatorInstance):
+def get_process(instance: EmulatorInstance) -> tuple:
     """
     Get emulator's process.
 
@@ -501,9 +549,9 @@ def get_process(instance: EmulatorInstance):
             return _get_process(pid)
 
 
-def switch_window(hwnds: list, arg: int = SW_SHOWNORMAL):
+def switch_window(hwnds: list, arg: int = SW_SHOWNORMAL) -> bool:
     """
-    Switch emulator's windowplacement to the given arg
+    Switch emulator's windowplacement to the given argument.
 
     Args:
         hwnds (list): Possible emulator's window hwnds
