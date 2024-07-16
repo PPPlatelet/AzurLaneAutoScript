@@ -1,15 +1,9 @@
-import ctypes
-import re
-import subprocess
-
-import psutil
-
-from deploy.Windows.utils import DataProcessInfo
 from module.base.decorator import run_once
 from module.base.timer import Timer
 from module.device.connection import AdbDeviceWithStatus
 from module.device.platform.platform_base import PlatformBase
 from module.device.platform.emulator_windows import Emulator, EmulatorInstance, EmulatorManager
+from module.device.platform import api_windows
 from module.logger import logger
 
 
@@ -17,104 +11,111 @@ class EmulatorUnknown(Exception):
     pass
 
 
-def get_focused_window():
-    return ctypes.windll.user32.GetForegroundWindow()
-
-
-def set_focus_window(hwnd):
-    ctypes.windll.user32.SetForegroundWindow(hwnd)
-
-
-def minimize_window(hwnd):
-    ctypes.windll.user32.ShowWindow(hwnd, 6)
-
-
-def get_window_title(hwnd):
-    """Returns the window title as a string."""
-    text_len_in_characters = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
-    string_buffer = ctypes.create_unicode_buffer(
-        text_len_in_characters + 1)  # +1 for the \0 at the end of the null-terminated string.
-    ctypes.windll.user32.GetWindowTextW(hwnd, string_buffer, text_len_in_characters + 1)
-    return string_buffer.value
-
-
-def flash_window(hwnd, flash=True):
-    ctypes.windll.user32.FlashWindow(hwnd, flash)
-
-
 class PlatformWindows(PlatformBase, EmulatorManager):
-    @classmethod
-    def execute(cls, command):
-        """
-        Args:
-            command (str):
+    process: tuple          = ()
+    hwnds: list             = []
+    focusedwindow: tuple    = ()
 
-        Returns:
-            subprocess.Popen:
-        """
-        command = command.replace(r"\\", "/").replace("\\", "/").replace('"', '"')
+    def __execute(self, command: str, start: bool) -> bool:
+        command = api_windows.fstr(command)
         logger.info(f'Execute: {command}')
-        return subprocess.Popen(command, close_fds=True)  # only work on Windows
 
-    @classmethod
-    def kill_process_by_regex(cls, regex: str) -> int:
-        """
-        Kill processes with cmdline match the given regex.
+        if self.config.Emulator_SilentStart == 'normal':
+            silentstart = False
+        else:
+            silentstart = True
 
-        Args:
-            regex:
+        if self.process:
+            if self.process[0] is not None and self.process[1] is not None:
+                api_windows.closehandle(self.process[:2])
+                self.process = ()
 
-        Returns:
-            int: Number of processes killed
-        """
-        count = 0
+        self.process, self.focusedwindow = api_windows.execute(command, silentstart, start)
+        return True
 
-        for proc in psutil.process_iter():
-            cmdline = DataProcessInfo(proc=proc, pid=proc.pid).cmdline
-            if re.search(regex, cmdline):
-                logger.info(f'Kill emulator: {cmdline}')
-                proc.kill()
-                count += 1
+    def _start(self, command: str) -> bool:
+        return self.__execute(command, start=True)
 
-        return count
+    def _stop(self, command: str) -> bool:
+        return self.__execute(command, start=False)
+
+    @staticmethod
+    def kill_process_by_regex(regex: str) -> int:
+        return api_windows.kill_process_by_regex(regex)
+
+    @staticmethod
+    def getfocusedwindow() -> tuple:
+        return api_windows.getfocusedwindow()
+
+    @staticmethod
+    def setforegroundwindow(focusedwindow: tuple) -> bool:
+        return api_windows.setforegroundwindow(focusedwindow)
+
+    @staticmethod
+    def get_hwnds(pid: int) -> list:
+        return api_windows.get_hwnds(pid)
+
+    @staticmethod
+    def get_process(instance: EmulatorInstance) -> tuple:
+        return api_windows.get_process(instance)
+
+    @staticmethod
+    def get_cmdline(pid: int) -> str:
+        return api_windows.get_cmdline(pid)
+
+    def switch_window(self) -> bool:
+        if not self.process:
+            self.process = self.get_process(self.emulator_instance)
+        if not self.hwnds:
+            self.hwnds = self.get_hwnds(self.process[2])
+        method = self.config.Emulator_SilentStart
+        if method == 'normal':
+            return api_windows.switch_window(self.hwnds, api_windows.SW_SHOW)
+        elif method == 'minimize':
+            return api_windows.switch_window(self.hwnds, api_windows.SW_MINIMIZE)
+        elif method == 'silent':
+            return api_windows.switch_window(self.hwnds, api_windows.SW_HIDE)
+        else:
+            from module.exception import ScriptError
+            raise ScriptError("Wrong setting")
 
     def _emulator_start(self, instance: EmulatorInstance):
         """
-        Start a emulator without error handling
+        Start an emulator without error handling
         """
         exe: str = instance.emulator.path
         if instance == Emulator.MuMuPlayer:
             # NemuPlayer.exe
-            self.execute(exe)
+            self._start(exe)
         elif instance == Emulator.MuMuPlayerX:
             # NemuPlayer.exe -m nemu-12.0-x64-default
-            self.execute(f'"{exe}" -m {instance.name}')
+            self._start(f'"{exe}" -m {instance.name}')
         elif instance == Emulator.MuMuPlayer12:
             # MuMuPlayer.exe -v 0
             if instance.MuMuPlayer12_id is None:
                 logger.warning(f'Cannot get MuMu instance index from name {instance.name}')
-            self.execute(f'"{exe}" -v {instance.MuMuPlayer12_id}')
+            self._start(f'"{exe}" -v {instance.MuMuPlayer12_id}')
         elif instance == Emulator.LDPlayerFamily:
             # LDPlayer.exe index=0
-            self.execute(f'"{exe}" index={instance.LDPlayer_id}')
+            self._start(f'"{exe}" index={instance.LDPlayer_id}')
         elif instance == Emulator.NoxPlayerFamily:
             # Nox.exe -clone:Nox_1
-            self.execute(f'"{exe}" -clone:{instance.name}')
+            self._start(f'"{exe}" -clone:{instance.name}')
         elif instance == Emulator.BlueStacks5:
             # HD-Player.exe --instance Pie64
-            self.execute(f'"{exe}" --instance {instance.name}')
+            self._start(f'"{exe}" --instance {instance.name}')
         elif instance == Emulator.BlueStacks4:
             # Bluestacks.exe -vmname Android_1
-            self.execute(f'"{exe}" -vmname {instance.name}')
+            self._start(f'"{exe}" -vmname {instance.name}')
         elif instance == Emulator.MEmuPlayer:
             # MEmu.exe MEmu_0
-            self.execute(f'"{exe}" {instance.name}')
+            self._start(f'"{exe}" {instance.name}')
         else:
             raise EmulatorUnknown(f'Cannot start an unknown emulator instance: {instance}')
 
     def _emulator_stop(self, instance: EmulatorInstance):
         """
-        Stop a emulator without error handling
+        Stop an emulator without error handling
         """
         exe: str = instance.emulator.path
         if instance == Emulator.MuMuPlayer:
@@ -149,13 +150,13 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             # E:\Program Files\Netease\MuMu Player 12\shell\MuMuManager.exe api -v 1 shutdown_player
             if instance.MuMuPlayer12_id is None:
                 logger.warning(f'Cannot get MuMu instance index from name {instance.name}')
-            self.execute(f'"{Emulator.single_to_console(exe)}" api -v {instance.MuMuPlayer12_id} shutdown_player')
+            self._stop(f'"{Emulator.single_to_console(exe)}" api -v {instance.MuMuPlayer12_id} shutdown_player')
         elif instance == Emulator.LDPlayerFamily:
             # E:\Program Files\leidian\LDPlayer9\dnconsole.exe quit --index 0
-            self.execute(f'"{Emulator.single_to_console(exe)}" quit --index {instance.LDPlayer_id}')
+            self._stop(f'"{Emulator.single_to_console(exe)}" quit --index {instance.LDPlayer_id}')
         elif instance == Emulator.NoxPlayerFamily:
             # Nox.exe -clone:Nox_1 -quit
-            self.execute(f'"{exe}" -clone:{instance.name} -quit')
+            self._stop(f'"{exe}" -clone:{instance.name} -quit')
         elif instance == Emulator.BlueStacks5:
             # BlueStack has 2 processes
             # C:\Program Files\BlueStacks_nxt_cn\HD-Player.exe --instance Pie64
@@ -167,10 +168,10 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             )
         elif instance == Emulator.BlueStacks4:
             # E:\Program Files (x86)\BluestacksCN\bsconsole.exe quit --name Android
-            self.execute(f'"{Emulator.single_to_console(exe)}" quit --name {instance.name}')
+            self._stop(f'"{Emulator.single_to_console(exe)}" quit --name {instance.name}')
         elif instance == Emulator.MEmuPlayer:
             # F:\Program Files\Microvirt\MEmu\memuc.exe stop -n MEmu_0
-            self.execute(f'"{Emulator.single_to_console(exe)}" stop -n {instance.name}')
+            self._stop(f'"{Emulator.single_to_console(exe)}" stop -n {instance.name}')
         else:
             raise EmulatorUnknown(f'Cannot stop an unknown emulator instance: {instance}')
 
@@ -204,10 +205,9 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             bool: True if startup completed
                 False if timeout
         """
-        logger.hr('Emulator start', level=2)
-        current_window = get_focused_window()
+        logger.info("Emulator starting...")
+        logger.info(f"Current window: {self.focusedwindow[0]}")
         serial = self.emulator_instance.serial
-        logger.info(f'Current window: {current_window}')
 
         def adb_connect():
             m = self.adb_client.connect(self.serial)
@@ -236,23 +236,12 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
         interval = Timer(0.5).start()
         timeout = Timer(300).start()
-        new_window = 0
         while 1:
             interval.wait()
             interval.reset()
             if timeout.reached():
                 logger.warning(f'Emulator start timeout')
                 return False
-
-            # Check emulator window showing up
-            # logger.info([get_focused_window(), get_window_title(get_focused_window())])
-            if current_window != 0 and new_window == 0:
-                new_window = get_focused_window()
-                if current_window != new_window:
-                    logger.info(f'New window showing up: {new_window}, focus back')
-                    set_focus_window(current_window)
-                else:
-                    new_window = 0
 
             # Check device connection
             devices = self.list_device().select(serial=serial)
@@ -291,24 +280,17 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             # All check passed
             break
 
-        if new_window != 0 and new_window != current_window:
-            logger.info(f'Minimize new window: {new_window}')
-            minimize_window(new_window)
-        if current_window:
-            logger.info(f'De-flash current window: {current_window}')
-            flash_window(current_window, flash=False)
-        if new_window:
-            logger.info(f'Flash new window: {new_window}')
-            flash_window(new_window, flash=True)
-        logger.info('Emulator start completed')
+        # Check emulator process and hwnds
+        self.hwnds = self.get_hwnds(self.process[2])
+
+        logger.info(f'Emulator start completed')
+        logger.info(f'Emulator Process: {self.process}')
+        logger.info(f'Emulator hwnds: {self.hwnds}')
         return True
 
     def emulator_start(self):
         logger.hr('Emulator start', level=1)
         for _ in range(3):
-            # Stop
-            if not self._emulator_function_wrapper(self._emulator_stop):
-                return False
             # Start
             if self._emulator_function_wrapper(self._emulator_start):
                 # Success
@@ -340,7 +322,34 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
         logger.error('Failed to stop emulator 3 times, stopped')
         return False
-    
+
+    def emulator_check(self) -> bool:
+        try:
+            if not self.process:
+                self.process = self.get_process(self.emulator_instance)
+                return True
+            cmdline = self.get_cmdline(self.process[2])
+            if self.emulator_instance.path in cmdline:
+                return True
+            else:
+                if self.process[0] is not None and self.process[1] is not None:
+                    api_windows.closehandle(self.process[:2])
+                    self.process = ()
+                raise ProcessLookupError
+        except api_windows.IterationFinished:
+            return False
+        except IndexError:
+            return False
+        except ProcessLookupError:
+            return self.emulator_check()
+        except OSError as e:
+            logger.error(e)
+            raise
+        except Exception as e:
+            logger.error(e)
+            raise
+
+
 if __name__ == '__main__':
     self = PlatformWindows('alas')
     d = self.emulator_instance
