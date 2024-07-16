@@ -11,13 +11,11 @@ class EmulatorUnknown(Exception):
     pass
 
 
-class EmulatorStatus:
+class PlatformWindows(PlatformBase, EmulatorManager):
     process: tuple          = ()
     hwnds: list             = []
     focusedwindow: tuple    = ()
-
-
-class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
+    
     def __execute(self, command: str, start: bool):
         command = api_windows.fstr(command)
         logger.info(f'Execute: {command}')
@@ -36,10 +34,10 @@ class PlatformWindows(PlatformBase, EmulatorManager, EmulatorStatus):
         return True
 
     def _start(self, command: str):
-        self.__execute(command, start=True)
+        return self.__execute(command, start=True)
 
     def _stop(self, command: str):
-        self.__execute(command, start=False)
+        return self.__execute(command, start=False)
 
     @staticmethod
     def CloseHandle(*args, **kwargs):
