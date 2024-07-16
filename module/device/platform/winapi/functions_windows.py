@@ -1,4 +1,5 @@
 from abc import ABCMeta, abstractmethod
+import typing as t
 from datetime import datetime
 import re
 from queue import Queue
@@ -175,57 +176,59 @@ class Handle(metaclass=ABCMeta):
     _func       = None
     _exitfunc   = None
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         self._handle = self._func(*self.__getinitargs__(*args, **kwargs))
         if not self:
-            report(f"{self._func.__name__} failed.",
-                   uselog=kwargs.get('uselog', True),
-                   raiseexcept=kwargs.get("raiseexcept", True))
+            report(
+                f"{self._func.__name__} failed.",
+                uselog=kwargs.get('uselog', True),
+                raiseexcept=kwargs.get("raiseexcept", True)
+            )
 
-    def __enter__(self):
+    def __enter__(self) -> int:
         return self._handle
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         if self:
             self._exitfunc(self._handle)
             self._handle = None
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return not self._is_invalid_handle()
 
     @abstractmethod
-    def __getinitargs__(self, *args, **kwargs): ...
+    def __getinitargs__(self, *args, **kwargs) -> tuple: ...
     @abstractmethod
-    def _is_invalid_handle(self): ...
+    def _is_invalid_handle(self) -> bool: ...
 
 class ProcessHandle(Handle):
     _func       = OpenProcess
     _exitfunc   = CloseHandle
 
-    def __getinitargs__(self, access, pid, uselog, raiseexcept):
+    def __getinitargs__(self, access, pid, uselog, raiseexcept) -> tuple:
         return access, False, pid
 
-    def _is_invalid_handle(self):
+    def _is_invalid_handle(self) -> bool:
         return self._handle is None
 
 class ThreadHandle(Handle):
     _func       = OpenThread
     _exitfunc   = CloseHandle
 
-    def __getinitargs__(self, access, pid, uselog, raiseexcept):
+    def __getinitargs__(self, access, pid, uselog, raiseexcept) -> tuple:
         return access, False, pid
 
-    def _is_invalid_handle(self):
+    def _is_invalid_handle(self) -> bool:
         return self._handle is None
 
 class CreateSnapshot(Handle):
     _func       = CreateToolhelp32Snapshot
     _exitfunc   = CloseHandle
 
-    def __getinitargs__(self, arg):
+    def __getinitargs__(self, arg) -> tuple:
         return arg, DWORD(0)
 
-    def _is_invalid_handle(self):
+    def _is_invalid_handle(self) -> bool:
         from module.device.platform.winapi.const_windows import INVALID_HANDLE_VALUE
         return self._handle == INVALID_HANDLE_VALUE
 
@@ -280,7 +283,7 @@ class Node:
 
     def __str__(self) -> str:
         return f"Node(data={self.data})"
-    
+
     __repr__ = __str__
 
     def add_children(self, data):
@@ -341,7 +344,7 @@ def report(
         handle: int         = 0,
         raiseexcept: bool   = True,
         exception: type     = OSError,
-):
+) -> None:
     """
     Report any exception.
     
@@ -368,20 +371,20 @@ def report(
     if raiseexcept:
         raise exception(message)
 
-def fstr(formatstr: str):
+def fstr(formatstr: str) -> t.Union[int, str]:
     try:
         return int(formatstr, 16)
     except ValueError:
         return formatstr.replace(r"\\", "/").replace("\\", "/").replace('"', '"')
 
-def open_process(access, pid, uselog=False, raiseexcept=True):
+def open_process(access, pid, uselog=False, raiseexcept=True) -> ProcessHandle:
     return ProcessHandle(access, pid, uselog=uselog, raiseexcept=raiseexcept)
 
-def open_thread(access, tid, uselog=False, raiseexcept=True):
+def open_thread(access, tid, uselog=False, raiseexcept=True) -> ThreadHandle:
     return ThreadHandle(access, tid, uselog=uselog, raiseexcept=raiseexcept)
 
-def create_snapshot(arg):
+def create_snapshot(arg) -> CreateSnapshot:
     return CreateSnapshot(arg)
 
-def evt_query():
+def evt_query() -> QueryEvt:
     return QueryEvt()
