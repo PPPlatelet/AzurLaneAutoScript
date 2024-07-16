@@ -414,6 +414,7 @@ def get_thread(pid: int):
             if lpte32.th32OwnerProcessID != pid:
                 continue
 
+            # In general, the first tid obtained by traversing is always the main tid, so these code can be commented.
             threadstarttime = _get_thread_creation_time(lpte32.th32ThreadID)
             if threadstarttime is None or threadstarttime >= minstarttime:
                 continue

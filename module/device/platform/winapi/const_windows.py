@@ -153,7 +153,6 @@ ERROR_NO_MORE_FILES = 0x12
 
 # winerror.h
 ERROR_SUCCESS               = 0     # line 227
-ERROR_INSUFFICIENT_BUFFER   = 122   # line 1041
 
 # winbase.h line 822
 INFINITE = 0xFFFFFFFF

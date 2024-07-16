@@ -17,11 +17,6 @@ user32      = WinDLL(name='user32',     use_last_error=True)
 kernel32    = WinDLL(name='kernel32',   use_last_error=True)
 ntdll       = WinDLL(name='ntdll',      use_last_error=True)
 wevtapi     = WinDLL(name='wevtapi',    use_last_error=True)
-shell32     = WinDLL(name='shell32',    use_last_error=True)
-
-IsUserAnAdmin                       = shell32.IsUserAnAdmin
-IsUserAnAdmin.argtypes              = []
-IsUserAnAdmin.restype               = BOOL
 
 CreateProcessW                      = kernel32.CreateProcessW
 CreateProcessW.argtypes             = [
@@ -129,10 +124,6 @@ GetThreadTimes.argtypes             = [
 ]
 GetThreadTimes.restype              = BOOL
 
-GetExitCodeProcess                  = kernel32.GetExitCodeProcess
-GetExitCodeProcess.argtypes         = [HANDLE, POINTER(DWORD)]
-GetExitCodeProcess.restype          = BOOL
-
 GetLastError                        = kernel32.GetLastError
 GetLastError.argtypes               = []
 GetLastError.restype                = DWORD
@@ -158,9 +149,11 @@ class Handle(metaclass=ABCMeta):
     def __init__(self, *args, **kwargs):
         self._handle = self._func(*self.__getinitargs__(*args, **kwargs))
         if not self:
-            report(f"{self._func.__name__} failed.",
-                   uselog=kwargs.get('uselog', True),
-                   raiseexcept=kwargs.get("raiseexcept", True))
+            report(
+                f"{self._func.__name__} failed.",
+                uselog=kwargs.get('uselog', True),
+                raiseexcept=kwargs.get("raiseexcept", True)
+            )
 
     def __enter__(self):
         return self._handle
