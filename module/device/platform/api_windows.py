@@ -194,6 +194,9 @@ def refresh_window(focusedwindow: tuple, max_attempts: int = 10, interval: float
         if newwindow[0] != currentwindow[0] and newwindow[0] != focusedwindow[0]:
             break
 
+        attempts += 1
+        sleep(interval)
+
 
 def execute(command: str, silentstart: bool, start: bool):
     """
@@ -389,6 +392,37 @@ def kill_process_by_regex(regex: str) -> int:
         return count
 
 
+def __get_creation_time(fopen, fgettime, access, identification):
+    with fopen(access, identification, uselog=False, raiseexcept=False) as handle:
+        creationtime    = FILETIME()
+        exittime        = FILETIME()
+        kerneltime      = FILETIME()
+        usertime        = FILETIME()
+        if not fgettime(
+            handle,
+            byref(creationtime),
+            byref(exittime),
+            byref(kerneltime),
+            byref(usertime)
+        ):
+            return None
+        return to_int(creationtime)
+
+def _get_process_creation_time(pid: int):
+    """
+    Get thread's creation time.
+
+    Args:
+        pid (int): Process id
+
+    Returns:
+        threadstarttime (int): Thread's start time
+
+    Raises:
+        OSError if OpenThread failed.
+    """
+    return __get_creation_time(open_process, GetProcessTimes, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, pid)
+
 def _get_thread_creation_time(tid: int):
     """
     Get thread's creation time.
@@ -402,20 +436,8 @@ def _get_thread_creation_time(tid: int):
     Raises:
         OSError if OpenThread failed.
     """
-    with open_thread(THREAD_QUERY_INFORMATION, tid) as hThread:
-        creationtime    = FILETIME()
-        exittime        = FILETIME()
-        kerneltime      = FILETIME()
-        usertime        = FILETIME()
-        if not GetThreadTimes(
-            hThread,
-            byref(creationtime),
-            byref(exittime),
-            byref(kerneltime),
-            byref(usertime)
-        ):
-            return None
-        return to_int(creationtime)
+    return __get_creation_time(open_thread, GetThreadTimes, THREAD_QUERY_INFORMATION, tid)
+
 
 def get_thread(pid: int):
     """
@@ -553,7 +575,6 @@ class ProcessManager:
     def __init__(self, pid: int):
         self.mainpid = pid
         self.datas = []
-        self.pids = []
         self.evttree = EventTree()
         self.lock = threading.Lock()
         self.loop = asyncio.get_event_loop()
@@ -574,7 +595,7 @@ class ProcessManager:
         await asyncio.sleep(1)
         return "grab"
 
-    async def grab_pids(self, pid: int):
+    async def grab_pids(self):
         if not IsUserAnAdmin():
             return
         with evt_query() as hevent:
@@ -583,35 +604,48 @@ class ProcessManager:
                 data = self.evttree.parse_event(content)
                 with self.lock:
                     self.datas.append(data)
-                if data.process_id == pid:
+                if data.new_process_id == self.mainpid:
                     break
             self.datas = self.datas[::-1]
-            await self.filltree()
+            await self.build_tree()
 
-    async def filltree(self):
-        self.evttree.root = Node(self.datas[0])
-        for data in self.datas[1::]:
-            evtiter = self.evttree.pre_traversal(self.evttree.root)
+    async def build_tree(self):
+        count = 0
+        for data in self.datas:
+            if data.process_id == self.mainpid:
+                break
+            count += 1
+        self.evttree.root = Node(self.datas[count])
+        for data in self.datas[count+1::]:
+            evtiter = self.evttree.pre_order_traversal(self.evttree.root)
             for node in evtiter:
                 if data != node.data:
                     continue
                 cmdline = get_cmdline(data.process_id)
-                if data.process_name not in cmdline:
+                if node.data.new_process_name not in cmdline:
                     continue
                 node.add_children(data)
+        self.logtree()
+
+    def logtree(self):
+        evtiter = self.evttree.level_order_traversal(self.evttree.root)
+        for node in evtiter:
+            if node is None:
+                break
+            logger.info(node.data)
 
     async def kill_pids(self):
         # TODO:kill process by enumerating tree
         with self.lock:
-            evtiter = self.evttree.post_traversal(self.evttree.root)
+            evtiter = self.evttree.post_order_traversal(self.evttree.root)
             for node in evtiter:
                 terminate_process(node.data.process_id)
-            while self.pids:
-                pass
+            del self.datas, self.evttree
+            self.datas, self.evttree = [], EventTree()
 
     def start(self):
         threading.Thread(target=self.loop.run_forever).start()
 
 if __name__ == '__main__':
-    p = 1234
-    PM = ProcessManager(1234)
+    PM = ProcessManager(27232)
+    PM.grab_pids()

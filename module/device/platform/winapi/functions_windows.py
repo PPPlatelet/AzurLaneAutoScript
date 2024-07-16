@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from datetime import datetime
-import xml.etree.ElementTree as Et
 import re
+from queue import Queue
 
 from ctypes import POINTER, WINFUNCTYPE, WinDLL, c_size_t
 from ctypes.wintypes import (
@@ -112,6 +112,16 @@ Thread32Next                        = kernel32.Thread32Next
 Thread32Next.argtypes               = [HANDLE, POINTER(THREADENTRY32)]
 Thread32Next.restype                = BOOL
 
+GetProcessTimes                     = kernel32.GetProcessTimes
+GetProcessTimes.argtypes            = [
+    HANDLE,
+    POINTER(FILETIME),
+    POINTER(FILETIME),
+    POINTER(FILETIME),
+    POINTER(FILETIME)
+]
+GetProcessTimes.restype             = BOOL
+
 GetThreadTimes                      = kernel32.GetThreadTimes
 GetThreadTimes.argtypes             = [
     HANDLE,
@@ -121,6 +131,10 @@ GetThreadTimes.argtypes             = [
     POINTER(FILETIME)
 ]
 GetThreadTimes.restype              = BOOL
+
+GetExitCodeProcess                  = kernel32.GetExitCodeProcess
+GetExitCodeProcess.argtypes         = [HANDLE, POINTER(DWORD)]
+GetExitCodeProcess.restype          = BOOL
 
 GetLastError                        = kernel32.GetLastError
 GetLastError.argtypes               = []
@@ -164,7 +178,9 @@ class Handle(metaclass=ABCMeta):
     def __init__(self, *args, **kwargs):
         self._handle = self._func(*self.__getinitargs__(*args, **kwargs))
         if not self:
-            report(f"{self._func.__name__} failed.", uselog=kwargs.get('uselog', True))
+            report(f"{self._func.__name__} failed.",
+                   uselog=kwargs.get('uselog', True),
+                   raiseexcept=kwargs.get("raiseexcept", True))
 
     def __enter__(self):
         return self._handle
@@ -186,7 +202,7 @@ class ProcessHandle(Handle):
     _func       = OpenProcess
     _exitfunc   = CloseHandle
 
-    def __getinitargs__(self, access, pid, uselog):
+    def __getinitargs__(self, access, pid, uselog, raiseexcept):
         return access, False, pid
 
     def _is_invalid_handle(self):
@@ -196,7 +212,7 @@ class ThreadHandle(Handle):
     _func       = OpenThread
     _exitfunc   = CloseHandle
 
-    def __getinitargs__(self, access, pid, uselog):
+    def __getinitargs__(self, access, pid, uselog, raiseexcept):
         return access, False, pid
 
     def _is_invalid_handle(self):
@@ -234,10 +250,21 @@ class Data:
         self.process_id: int        = data.get("ProcessId", 0)
         self.process_name: str      = data.get("ParentProcessName", '')
 
-    def __eq__(self, other: 'Data'):
+    def __eq__(self, other):
         if isinstance(other, Data):
             return self.process_id == other.new_process_id
         return NotImplemented
+
+    def __str__(self):
+        return (
+            f"Data(system time={self.system_time}, "
+            f"new process ID={self.new_process_id}, "
+            f"new process name={self.new_process_name}, "
+            f"process ID={self.process_id}, "
+            f"process name={self.process_name})"
+        )
+
+    __repr__ = __str__
 
 class Node:
     # TODO:UNDER DEVELOPMENT!!!!!! DO NOT USE!!!!
@@ -251,15 +278,21 @@ class Node:
         if self.children:
             del self.children
 
+    def __str__(self) -> str:
+        return f"Node(data={self.data})"
+    
+    __repr__ = __str__
+
     def add_children(self, data):
         self.children.append(Node(data))
 
 class EventTree:
     # TODO:UNDER DEVELOPMENT!!!!!! DO NOT USE!!!!
-    root: Node = None
+    root = None
 
     @staticmethod
     def parse_event(event: str):
+        import xml.etree.ElementTree as Et
         ns              = {'ns': 'http://schemas.microsoft.com/win/2004/08/events/event'}
         root            = Et.fromstring(event)
         system_time_str = root.find('.//ns:TimeCreated', ns).attrib['SystemTime']
@@ -272,19 +305,31 @@ class EventTree:
 
         return Data(data, system_time)
 
-    def pre_traversal(self, node: Node = None):
+    def pre_order_traversal(self, node: Node):
         if node is not None:
             yield node
             for child in node.children:
-                yield from self.pre_traversal(child)
+                yield from self.pre_order_traversal(child)
 
-    def post_traversal(self, node: Node = None):
+    def post_order_traversal(self, node: Node):
         if node is not None:
             for child in node.children:
-                yield from self.post_traversal(child)
+                yield from self.post_order_traversal(child)
             yield node
 
-    def delete_tree(self):
+    @staticmethod
+    def level_order_traversal(node: Node):
+        q = Queue()
+        q.put(node)
+        while not q.empty():
+            out = q.get()
+            yield out
+            if not out.children:
+                continue
+            for child in out.children:
+                q.put(child)
+
+    def release_tree(self):
         del self.root
         self.root = None
 
@@ -329,11 +374,11 @@ def fstr(formatstr: str):
     except ValueError:
         return formatstr.replace(r"\\", "/").replace("\\", "/").replace('"', '"')
 
-def open_process(access, pid, uselog=False):
-    return ProcessHandle(access, pid, uselog=uselog)
+def open_process(access, pid, uselog=False, raiseexcept=True):
+    return ProcessHandle(access, pid, uselog=uselog, raiseexcept=raiseexcept)
 
-def open_thread(access, tid, uselog=False):
-    return ThreadHandle(access, tid, uselog=uselog)
+def open_thread(access, tid, uselog=False, raiseexcept=True):
+    return ThreadHandle(access, tid, uselog=uselog, raiseexcept=raiseexcept)
 
 def create_snapshot(arg):
     return CreateSnapshot(arg)
