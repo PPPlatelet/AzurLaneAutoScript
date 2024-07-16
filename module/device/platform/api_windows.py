@@ -1,6 +1,5 @@
 import threading
 import asyncio
-import re
 
 from ctypes import byref, sizeof, create_unicode_buffer, wstring_at, addressof
 
@@ -9,7 +8,7 @@ from module.device.platform.winapi import *
 from module.logger import logger
 
 
-def CloseHandle(*args, **kwargs) -> bool:
+def closehandle(*args, **kwargs) -> bool:
     """
     Args:
         *args:
@@ -21,15 +20,15 @@ def CloseHandle(*args, **kwargs) -> bool:
     for handle in args:
         if isinstance(handle, tuple):
             for h in handle:
-                functions_windows.CloseHandle(h)
+                CloseHandle(h)
         else:
-            functions_windows.CloseHandle(handle)
+            CloseHandle(handle)
     for _, handle in kwargs.items():
         if isinstance(handle, tuple):
             for h in handle:
-                functions_windows.CloseHandle(h)
+                CloseHandle(h)
         else:
-            functions_windows.CloseHandle(handle)
+            CloseHandle(handle)
     return True
 
 
@@ -306,7 +305,7 @@ def execute(command: str, silentstart: bool, start: bool) -> tuple:
             lpProcessInformation.dwThreadId
         )
     else:
-        CloseHandle(lpProcessInformation.hProcess, lpProcessInformation.hThread)
+        closehandle(lpProcessInformation.hProcess, lpProcessInformation.hThread)
         process = ()
 
     return process, focusedwindow

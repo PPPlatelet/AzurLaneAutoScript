@@ -27,7 +27,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
         if self.process:
             if self.process[0] is not None and self.process[1] is not None:
-                api_windows.CloseHandle(self.process[:2])
+                api_windows.closehandle(self.process[:2])
                 self.process = ()
 
         self.process, self.focusedwindow = api_windows.execute(command, silentstart, start)
@@ -333,7 +333,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 return True
             else:
                 if self.process[0] is not None and self.process[1] is not None:
-                    api_windows.CloseHandle(self.process[:2])
+                    api_windows.closehandle(self.process[:2])
                     self.process = ()
                 raise ProcessLookupError
         except api_windows.IterationFinished:
