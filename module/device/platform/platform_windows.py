@@ -15,7 +15,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
     process: tuple          = ()
     hwnds: list             = []
     focusedwindow: tuple    = ()
-    
+
     def __execute(self, command: str, start: bool) -> bool:
         command = api_windows.fstr(command)
         logger.info(f'Execute: {command}')
@@ -46,7 +46,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
     @staticmethod
     def getfocusedwindow() -> tuple:
         return api_windows.getfocusedwindow()
-    
+
     @staticmethod
     def setforegroundwindow(focusedwindow: tuple) -> bool:
         return api_windows.setforegroundwindow(focusedwindow)
@@ -58,7 +58,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
     @staticmethod
     def get_process(instance: EmulatorInstance) -> tuple:
         return api_windows.get_process(instance)
-    
+
     @staticmethod
     def get_cmdline(pid: int) -> str:
         return api_windows.get_cmdline(pid)
@@ -102,7 +102,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             # Nox.exe -clone:Nox_1
             self._start(f'"{exe}" -clone:{instance.name}')
         elif instance == Emulator.BlueStacks5:
-            # HD-Player.exe -instance Pie64
+            # HD-Player.exe --instance Pie64
             self._start(f'"{exe}" --instance {instance.name}')
         elif instance == Emulator.BlueStacks4:
             # Bluestacks.exe -vmname Android_1
