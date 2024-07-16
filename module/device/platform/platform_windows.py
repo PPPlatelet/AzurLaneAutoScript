@@ -34,10 +34,10 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         return True
 
     def _start(self, command: str):
-        self.__execute(command, start=True)
+        return self.__execute(command, start=True)
 
     def _stop(self, command: str):
-        self.__execute(command, start=False)
+        return self.__execute(command, start=False)
 
     @staticmethod
     def CloseHandle(*args, **kwargs):
