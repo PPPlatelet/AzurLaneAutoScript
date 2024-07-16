@@ -8,7 +8,7 @@ from module.device.platform.winapi import *
 from module.logger import logger
 
 
-def __yieldloop(entry32, snapshot, func: callable):
+def __yield_entries(entry32, snapshot, func: callable):
     """
     Generates a loop that yields entries from a snapshot until the function fails or finishes.
 
@@ -51,7 +51,7 @@ def _enum_processes():
     with create_snapshot(TH32CS_SNAPPROCESS) as snapshot:
         if not Process32First(snapshot, byref(lppe32)):
             report("Process32First failed.")
-        yield from __yieldloop(lppe32, snapshot, Process32Next)
+        yield from __yield_entries(lppe32, snapshot, Process32Next)
 
 
 def _enum_threads():
@@ -70,7 +70,7 @@ def _enum_threads():
     with create_snapshot(TH32CS_SNAPTHREAD) as snapshot:
         if not Thread32First(snapshot, byref(lpte32)):
             report("Thread32First failed.")
-        yield from __yieldloop(lpte32, snapshot, Thread32Next)
+        yield from __yield_entries(lpte32, snapshot, Thread32Next)
 
 
 def _enum_events(hevent):
