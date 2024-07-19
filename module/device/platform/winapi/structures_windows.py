@@ -1,13 +1,134 @@
-from ctypes import POINTER, Structure
+from ctypes import POINTER, sizeof, Structure as _Structure
 from ctypes.wintypes import (
     HANDLE, DWORD, WORD, BYTE, BOOL, USHORT,
     UINT, LONG, CHAR, LPWSTR, LPVOID, MAX_PATH,
-    RECT, PULONG, POINT, PWCHAR, FILETIME
+    RECT, PULONG, POINT, PWCHAR, FILETIME as _FILETIME
 )
 
 class EmulatorLaunchFailedError(Exception): ...
 class HwndNotFoundError(Exception): ...
 class IterationFinished(Exception): ...
+
+class Structure(_Structure):
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls.field_name = tuple(name for name, _ in cls._fields_)
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return NotImplemented
+        for name in self.field_name:
+            if getattr(self, name) != getattr(other, name):
+                return False
+        return True
+
+    def __repr__(self):
+        field_values = ', '.join(f"{name}={getattr(self, name)!r}" for name in self.field_name)
+        return f"{self.__class__.__name__}({field_values})"
+
+    def __str__(self):
+        field_values = ', '.join(f"{name}={getattr(self, name)}" for name in self.field_name)
+        return f"{self.__class__.__name__}({field_values})"
+
+    def __hash__(self):
+        field_values = tuple(getattr(self, name) for name in self.field_name)
+        return hash((self.__class__, field_values))
+
+    def __sizeof__(self):
+        return sizeof(self)
+
+    def __iter__(self):
+        for name in self.field_name:
+            yield name, getattr(self, name)
+
+    def __setitem__(self, key, value):
+        if isinstance(key, slice):
+            indices = range(*key.indices(len(self)))
+            if len(indices) != len(value):
+                raise ValueError("Value list length does not match slice length")
+            for i, val in zip(indices, value):
+                setattr(self, self.field_name[i], val)
+        elif isinstance(key, int):
+            if key < 0 or key >= len(self):
+                raise IndexError("Index out of range")
+            setattr(self, self.field_name[key], value)
+        elif isinstance(key, str):
+            if key not in self.field_name:
+                raise KeyError(f"'{self.__class__.__name__}' object has no key '{key}'")
+            setattr(self, key, value)
+        else:
+            raise TypeError("Invalid argument type")
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            indices = range(*item.indices(len(self)))
+            return [getattr(self, self.field_name[i]) for i in indices]
+        elif isinstance(item, int):
+            if item < 0 or item >= len(self):
+                raise IndexError("Index out of range")
+            return getattr(self, self.field_name[item])
+        elif isinstance(item, str):
+            if item not in self.field_name:
+                raise KeyError(f"'{self.__class__.__name__}' object has no item '{item}'")
+            return getattr(self, item)
+        else:
+            raise TypeError("Invalid argument type")
+
+    def __contains__(self, item):
+        return item in self.field_name
+
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.__dict__.update(self.__dict__)
+        return result
+
+    def __deepcopy__(self, memodict=None):
+        import copy as cp
+        if memodict is None:
+            memodict = {}
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memodict[id(self)] = result
+        for name in self.field_name:
+            setattr(result, name, cp.deepcopy(getattr(self, name), memodict))
+        return result
+
+    def __len__(self):
+        return len(self.field_name)
+
+    def __dir__(self):
+        return [*super().__dir__()]
+
+    def __format__(self, format_spec):
+        if format_spec == '':
+            return str(self)
+        elif format_spec not in {'b', 'x'}:
+            raise ValueError(f"Unsupported format specifier: {format_spec}")
+        if format_spec == 'b':
+            field_values = ', '.join(
+                f"{name}=0b{getattr(self, name):b}"
+                if isinstance(getattr(self, name), int)
+                else f"{name}={getattr(self, name)}"
+                for name in self.field_name
+            )
+            return f"{self.__class__.__name__}({field_values})"
+        elif format_spec == 'x':
+            field_values = ', '.join(
+                f"{name}=0x{getattr(self, name):x}"
+                if isinstance(getattr(self, name), int)
+                else f"{name}={getattr(self, name)}"
+                for name in self.field_name
+            )
+            return f"{self.__class__.__name__}({field_values})"
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb): ...
+
+    def __bytes__(self):
+        return bytes(str(self), 'utf-8')
 
 # processthreadsapi.h line 28
 class PROCESS_INFORMATION(Structure):
@@ -120,5 +241,6 @@ class PROCESS_BASIC_INFORMATION(Structure):
         ("InheritedFromUniqueProcessId",    PULONG),
     ]
 
-def to_int(filetime: FILETIME):
-    return (filetime.dwHighDateTime << 32) + filetime.dwLowDateTime
+class FILETIME(Structure, _FILETIME):
+    def to_int(self):
+        return (self.dwHighDateTime << 32) + self.dwLowDateTime

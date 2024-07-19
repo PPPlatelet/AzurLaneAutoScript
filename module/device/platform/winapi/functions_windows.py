@@ -18,6 +18,44 @@ user32      = WinDLL(name='user32',     use_last_error=True)
 kernel32    = WinDLL(name='kernel32',   use_last_error=True)
 ntdll       = WinDLL(name='ntdll',      use_last_error=True)
 wevtapi     = WinDLL(name='wevtapi',    use_last_error=True)
+advapi32    = WinDLL(name='advapi32',   use_last_error=True)
+userenv     = WinDLL(name='userenv',    use_last_error=True)
+
+OpenProcessToken                    = advapi32.OpenProcessToken
+OpenProcessToken.argtypes           = [HANDLE, DWORD, POINTER(HANDLE)]
+OpenProcessToken.restype            = LONG
+
+DuplicateTokenEx                    = advapi32.DuplicateTokenEx
+DuplicateTokenEx.argtypes           = [HANDLE, DWORD, POINTER(LPVOID), ULONG, ULONG, POINTER(HANDLE)]
+DuplicateTokenEx.restype            = LONG
+
+CreateProcessAsUserW                = advapi32.CreateProcessAsUserW
+CreateProcessAsUserW.argtypes       = [
+    HANDLE,                         # hToken
+    LPCWSTR,                        # lpApplicationName
+    LPWSTR,                         # lpCommandLine
+    POINTER(SECURITY_ATTRIBUTES),   # lpProcessAttributes
+    POINTER(SECURITY_ATTRIBUTES),   # lpThreadAttributes
+    BOOL,                           # bInheritHandles
+    DWORD,                          # dwCreationFlags
+    LPVOID,                         # lpEnvironment
+    LPCWSTR,                        # lpCurrentDirectory
+    POINTER(STARTUPINFOW),          # lpStartupInfo
+    POINTER(PROCESS_INFORMATION)    # lpProcessInformation
+]
+CreateProcessAsUserW.restype        = BOOL
+
+GetCurrentProcess                   = kernel32.GetCurrentProcess
+GetCurrentProcess.argtypes          = []
+GetCurrentProcess.restype           = HANDLE
+
+CreateEnvironmentBlock              = userenv.CreateEnvironmentBlock
+CreateEnvironmentBlock.argtypes     = [POINTER(LPVOID), HANDLE, BOOL]
+CreateEnvironmentBlock.restype      = BOOL
+
+DestroyEnvironmentBlock             = userenv.DestroyEnvironmentBlock
+DestroyEnvironmentBlock.argtypes    = [LPVOID]
+DestroyEnvironmentBlock.restype     = BOOL
 
 CreateProcessW                      = kernel32.CreateProcessW
 CreateProcessW.argtypes             = [
@@ -66,7 +104,7 @@ GetWindowRect                       = user32.GetWindowRect
 GetWindowRect.argtypes              = [HWND, LPRECT]
 GetWindowRect.restype               = BOOL
 
-EnumWindowsProc                     = WINFUNCTYPE(BOOL, HWND, LPARAM)
+EnumWindowsProc                     = WINFUNCTYPE(BOOL, HWND, LPARAM, use_last_error=True)
 EnumWindows                         = user32.EnumWindows
 EnumWindows.argtypes                = [EnumWindowsProc, LPARAM]
 EnumWindows.restype                 = BOOL
@@ -148,7 +186,7 @@ class Handle(metaclass=ABCMeta):
     _exitfunc   = None
 
     def __init__(self, *args, **kwargs) -> None:
-        self._handle = self._func(*self.__getinitargs__(*args, **kwargs))
+        self._handle = self._func(*self.__get_init_args__(*args, **kwargs))
         if not self:
             report(
                 f"{self._func.__name__} failed.",
@@ -168,7 +206,7 @@ class Handle(metaclass=ABCMeta):
         return not self._is_invalid_handle()
 
     @abstractmethod
-    def __getinitargs__(self, *args, **kwargs) -> tuple: ...
+    def __get_init_args__(self, *args, **kwargs) -> tuple: ...
     @abstractmethod
     def _is_invalid_handle(self) -> bool: ...
 
@@ -176,7 +214,7 @@ class ProcessHandle(Handle):
     _func       = OpenProcess
     _exitfunc   = CloseHandle
 
-    def __getinitargs__(self, access, pid, uselog, raiseexcept) -> tuple:
+    def __get_init_args__(self, access, pid, uselog, raiseexcept) -> tuple:
         return access, False, pid
 
     def _is_invalid_handle(self) -> bool:
@@ -186,7 +224,7 @@ class ThreadHandle(Handle):
     _func       = OpenThread
     _exitfunc   = CloseHandle
 
-    def __getinitargs__(self, access, pid, uselog, raiseexcept) -> tuple:
+    def __get_init_args__(self, access, pid, uselog, raiseexcept) -> tuple:
         return access, False, pid
 
     def _is_invalid_handle(self) -> bool:
@@ -196,7 +234,7 @@ class CreateSnapshot(Handle):
     _func       = CreateToolhelp32Snapshot
     _exitfunc   = CloseHandle
 
-    def __getinitargs__(self, arg) -> tuple:
+    def __get_init_args__(self, arg) -> tuple:
         return arg, DWORD(0)
 
     def _is_invalid_handle(self) -> bool:
@@ -206,24 +244,28 @@ class CreateSnapshot(Handle):
 
 def report(
         msg: str            = '',
+        *args,
         statuscode: int     = -1,
         uselog: bool        = True,
         level: int          = 40,
         handle: int         = 0,
         raiseexcept: bool   = True,
         exception: type     = OSError,
+        **kwargs,
 ) -> None:
     """
     Report any exception.
     
     Args:
         msg (str):
+        args:
         statuscode (int):
         uselog (bool):
         level (int): Logging level
         handle (int): Handle to close
         raiseexcept (bool): Flag indicating whether to raise
         exception (Type[Exception]): Exception class to raise
+        kwargs:
 
     Raises:
         Optional[OSError]:
@@ -231,7 +273,11 @@ def report(
     from module.logger import logger
     if statuscode == -1:
         statuscode = GetLastError()
-    message = f"{msg} Status code: 0x{statuscode:08x}"
+    message = f"{msg} Status code: 0x{statuscode:08x} "
+    if args:
+        message += f"args: {' '.join(map(str, args))} "
+    if kwargs:
+        message += f"kwargs: {kwargs} "
     if uselog:
         logger.log(level, message)
     if handle:
@@ -253,3 +299,29 @@ def open_thread(access, tid, uselog=False, raiseexcept=True) -> ThreadHandle:
 
 def create_snapshot(arg) -> CreateSnapshot:
     return CreateSnapshot(arg)
+
+def time_it(func):
+    from time import time
+    from functools import wraps
+    from module.logger import logger
+    import logging
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        original_level = logger.level
+        logger.setLevel(logging.DEBUG)
+
+        logger.debug(f"Entering {func.__name__}")
+        start_time = time()
+
+        try:
+            result = func(*args, **kwargs)
+        finally:
+            end_time = time()
+            logger.debug(f"Exiting {func.__name__}")
+            logger.debug(f"{func.__name__} executed in {end_time - start_time:.4f} seconds")
+
+            logger.setLevel(original_level)
+
+        return result
+    return wrapper
