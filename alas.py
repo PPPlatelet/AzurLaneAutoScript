@@ -563,6 +563,7 @@ class AzurLaneAutoScript:
             # Reboot emulator
             if not self.device.emulator_check():
                 self.emurestart(task)
+            self.device.config = self.config
             # Skip first restart
             if self.is_first_task and task == 'Restart':
                 logger.info('Skip task `Restart` at scheduler start')
