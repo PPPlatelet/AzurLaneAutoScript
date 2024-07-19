@@ -1,34 +1,27 @@
 import threading
+import re
 import asyncio
 
-from ctypes import byref, sizeof, create_unicode_buffer, wstring_at, addressof
+from ctypes import byref, create_unicode_buffer, wstring_at, addressof
 
 from module.device.platform.emulator_windows import Emulator, EmulatorInstance
 from module.device.platform.winapi import *
 from module.logger import logger
 
 
-def closehandle(*args, **kwargs) -> bool:
+def closehandle(*args, fclose=CloseHandle) -> bool:
     """
+    Close handles.
+
     Args:
         *args:
-        **kwargs:
+        fclose (callable):
 
     Returns:
         bool:
     """
     for handle in args:
-        if isinstance(handle, tuple):
-            for h in handle:
-                CloseHandle(h)
-        else:
-            CloseHandle(handle)
-    for _, handle in kwargs.items():
-        if isinstance(handle, tuple):
-            for h in handle:
-                CloseHandle(h)
-        else:
-            CloseHandle(handle)
+        fclose(handle)
     return True
 
 
@@ -155,8 +148,6 @@ def getfocusedwindow() -> tuple:
         WINDOWPLACEMENT: The window placement or None if it couldn't be retrieved.
     """
     hwnd = GetForegroundWindow()
-    if not hwnd:
-        return 0, None
     wp = WINDOWPLACEMENT()
     wp.length = sizeof(WINDOWPLACEMENT)
     if GetWindowPlacement(hwnd, byref(wp)):
@@ -170,7 +161,7 @@ def setforegroundwindow(focusedwindow: tuple) -> bool:
     Refocus foreground window.
 
     Args:
-        focusedwindow (tuple(hwnd, WINDOWPLACEMENT) or tuple(hwnd, None)):
+        focusedwindow (tuple(hwnd, WINDOWPLACEMENT) | tuple(hwnd, None)):
 
     Returns:
         bool:
@@ -179,6 +170,7 @@ def setforegroundwindow(focusedwindow: tuple) -> bool:
     if focusedwindow[1] is None:
         ShowWindow(focusedwindow[0], SW_SHOWNORMAL)
     else:
+        ShowWindow(focusedwindow[0], focusedwindow[1].showCmd)
         SetWindowPlacement(focusedwindow[0], focusedwindow[1])
     return True
 
@@ -197,18 +189,16 @@ def refresh_window(focusedwindow: tuple, max_attempts: int = 10, interval: float
 
     """
     from time import sleep
+    from itertools import combinations
+    unique = lambda *args: all(x != y for x, y in combinations(args, 2))
     attempts = 0
-    failed = 0
+    prevwindow = ()
 
     while attempts < max_attempts:
         currentwindow = getfocusedwindow()
-
-        if not (focusedwindow[0] and currentwindow[0]):
-            failed += 1
-            if failed >= max_attempts:
-                report("Flash window failed.")
-            sleep(interval)
-            continue
+        if prevwindow:
+            if unique(currentwindow[0], prevwindow[0], focusedwindow[0]):
+                break
 
         if focusedwindow[0] != currentwindow[0]:
             logger.info(f"Current window is {currentwindow[0]}, flash back to {focusedwindow[0]}")
@@ -216,20 +206,10 @@ def refresh_window(focusedwindow: tuple, max_attempts: int = 10, interval: float
             attempts += 1
             sleep(interval)
 
-        newwindow = getfocusedwindow()
-
-        if not newwindow[0]:
-            failed += 1
-            if failed >= max_attempts:
-                report("Flash window failed.")
-            sleep(interval)
-            continue
-
-        if newwindow[0] != currentwindow[0] and newwindow[0] != focusedwindow[0]:
-            break
-
         attempts += 1
         sleep(interval)
+
+        prevwindow = currentwindow
 
 
 def execute(command: str, silentstart: bool, start: bool) -> tuple:
@@ -264,8 +244,8 @@ def execute(command: str, silentstart: bool, start: bool) -> tuple:
     lpThreadAttributes          = None
     bInheritHandles             = False
     dwCreationFlags             = (
-        CREATE_NO_WINDOW |
-        IDLE_PRIORITY_CLASS |
+        DETACHED_PROCESS |
+        NORMAL_PRIORITY_CLASS |
         CREATE_NEW_PROCESS_GROUP |
         CREATE_DEFAULT_ERROR_MODE |
         CREATE_UNICODE_ENVIRONMENT
@@ -298,17 +278,10 @@ def execute(command: str, silentstart: bool, start: bool) -> tuple:
         report("Failed to start emulator.", exception=EmulatorLaunchFailedError)
 
     if start:
-        process = (
-            lpProcessInformation.hProcess,
-            lpProcessInformation.hThread,
-            lpProcessInformation.dwProcessId,
-            lpProcessInformation.dwThreadId
-        )
+        return lpProcessInformation, focusedwindow
     else:
         closehandle(lpProcessInformation.hProcess, lpProcessInformation.hThread)
-        process = ()
-
-    return process, focusedwindow
+        return (), focusedwindow
 
 
 def terminate_process(pid: int) -> bool:
@@ -343,14 +316,16 @@ def get_hwnds(pid: int) -> list:
     hwnds = []
 
     @EnumWindowsProc
-    def callback(hwnd: int, lparam):
+    def callback(hwnd: HWND, lparam: LPARAM):  # DO NOT DELETE THIS PARAMETER!!!
         processid = DWORD()
         GetWindowThreadProcessId(hwnd, byref(processid))
         if processid.value == pid:
             hwnds.append(hwnd)
         return True
     
-    EnumWindows(callback, 0)
+    if not EnumWindows(callback, 0):
+        report("Failed to get hwnds.")
+
     if not hwnds:
         logger.error("Hwnd not found!")
         logger.error("1.Perhaps emulator was killed.")
@@ -378,7 +353,7 @@ def get_cmdline(pid: int) -> str:
             returnlength = ULONG()
             status = NtQueryInformationProcess(hProcess, 0, byref(pbi), sizeof(pbi), byref(returnlength))
             if status != STATUS_SUCCESS:
-                report(f"NtQueryInformationProcess failed. Status: 0x{status}.", level=30)
+                report(f"NtQueryInformationProcess failed. Status: 0x{status:x}.", level=30)
 
             # Read PEB
             peb = PEB()
@@ -456,7 +431,7 @@ def __get_creation_time(fopen: callable, fgettime: callable, access: int, identi
             byref(usertime)
         ):
             return None
-        return to_int(creationtime)
+        return creationtime.to_int()
 
 def _get_process_creation_time(pid: int) -> t.Optional[int]:
     """
@@ -574,28 +549,19 @@ def get_process(instance: EmulatorInstance) -> tuple:
             continue
         if instance == Emulator.MuMuPlayer12:
             match = re.search(r'-v\s*(\d+)', cmdline)
-            if not match:
-                continue
-            if int(match.group(1)) != instance.MuMuPlayer12_id:
-                continue
-            processes.close()
-            return _get_process(pid)
+            if match and int(match.group(1)) == instance.MuMuPlayer12_id:
+                processes.close()
+                return _get_process(pid)
         elif instance == Emulator.LDPlayerFamily:
             match = re.search(r'index=\s*(\d+)', cmdline)
-            if not match:
-                continue
-            if int(match.group(1)) != instance.LDPlayer_id:
-                continue
-            processes.close()
-            return _get_process(pid)
+            if match and int(match.group(1)) == instance.LDPlayer_id:
+                processes.close()
+                return _get_process(pid)
         else:
             matchname = re.search(fr'{instance.name}(\s+|$)', cmdline)
-            if not matchname:
-                continue
-            if matchname.group(0).strip() != instance.name:
-                continue
-            processes.close()
-            return _get_process(pid)
+            if matchname and matchname.group(0).strip() == instance.name:
+                processes.close()
+                return _get_process(pid)
 
 
 def switch_window(hwnds: list, arg: int = SW_SHOWNORMAL) -> bool:

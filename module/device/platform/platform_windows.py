@@ -12,8 +12,11 @@ class EmulatorUnknown(Exception):
 
 
 class PlatformWindows(PlatformBase, EmulatorManager):
+    # Quadruple, contains the kernel process object, kernel thread object, process ID and thread ID.
     process: tuple          = ()
+    # Window handles of the target process.
     hwnds: list             = []
+    # Pair, contains the hwnd of the focused window and a WINDOWPLACEMENT object.
     focusedwindow: tuple    = ()
 
     def __execute(self, command: str, start: bool) -> bool:
@@ -26,8 +29,8 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             silentstart = True
 
         if self.process:
-            if self.process[0] is not None and self.process[1] is not None:
-                api_windows.closehandle(self.process[:2])
+            if not all(self.process[:2]):
+                api_windows.closehandle(*self.process[:2])
                 self.process = ()
 
         self.process, self.focusedwindow = api_windows.execute(command, silentstart, start)
@@ -332,8 +335,8 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             if self.emulator_instance.path in cmdline:
                 return True
             else:
-                if self.process[0] is not None and self.process[1] is not None:
-                    api_windows.closehandle(self.process[:2])
+                if not all(self.process[:2]):
+                    api_windows.closehandle(*self.process[:2])
                     self.process = ()
                 raise ProcessLookupError
         except api_windows.IterationFinished:
