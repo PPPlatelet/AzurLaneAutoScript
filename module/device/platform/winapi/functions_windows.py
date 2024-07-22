@@ -13,7 +13,7 @@ from ctypes.wintypes import (
 
 from module.device.platform.winapi.structures_windows import (
     SECURITY_ATTRIBUTES, STARTUPINFOW, WINDOWPLACEMENT,
-    PROCESS_INFORMATION, PROCESSENTRY32, THREADENTRY32,
+    PROCESS_INFORMATION, PROCESSENTRY32W, THREADENTRY32,
     FILETIME
 )
 
@@ -136,11 +136,11 @@ CloseHandle.argtypes                = [HANDLE]
 CloseHandle.restype                 = BOOL
 
 Process32First                      = kernel32.Process32First
-Process32First.argtypes             = [HANDLE, POINTER(PROCESSENTRY32)]
+Process32First.argtypes             = [HANDLE, POINTER(PROCESSENTRY32W)]
 Process32First.restype              = BOOL
 
 Process32Next                       = kernel32.Process32Next
-Process32Next.argtypes              = [HANDLE, POINTER(PROCESSENTRY32)]
+Process32Next.argtypes              = [HANDLE, POINTER(PROCESSENTRY32W)]
 Process32Next.restype               = BOOL
 
 Thread32First                       = kernel32.Thread32First
@@ -293,19 +293,16 @@ class Data:
 
     def __eq__(self, other):
         if isinstance(other, Data):
-            return self.process_id == other.new_process_id
+            return self.new_process_id == other.process_id
         return NotImplemented
 
     def __str__(self):
-        return (
-            f"Data(system time={self.system_time}, "
-            f"new process ID={self.new_process_id}, "
-            f"new process name={self.new_process_name}, "
-            f"process ID={self.process_id}, "
-            f"process name={self.process_name})"
-        )
+        attrs = ', '.join(f"{key}={value}" for key, value in self.__dict__.items())
+        return f"Data({attrs})"
 
-    __repr__ = __str__
+    def __repr__(self):
+        attrs = ', '.join(f"{key}={value!r}" for key, value in self.__dict__.items())
+        return f"Data({attrs})"
 
 class Node:
     # TODO:UNDER DEVELOPMENT!!!!!! DO NOT USE!!!!
@@ -313,16 +310,11 @@ class Node:
         self.data = data
         self.children = []
 
-    def __del__(self):
-        if self.data is not None:
-            del self.data
-        if self.children:
-            del self.children
+    def __repr__(self):
+        return f"{self.__class__.__name__}(data={self.data!r})"
 
     def __str__(self) -> str:
-        return f"Node(data={self.data})"
-
-    __repr__ = __str__
+        return f"{self.__class__.__name__}(data={self.data})"
 
     def add_children(self, data):
         self.children.append(Node(data))
@@ -371,7 +363,6 @@ class EventTree:
                 q.put(child)
 
     def release_tree(self):
-        del self.root
         self.root = None
 
 def report(

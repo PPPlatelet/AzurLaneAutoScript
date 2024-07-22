@@ -1,5 +1,4 @@
 import threading
-import re
 import asyncio
 
 from ctypes import byref, create_unicode_buffer, wstring_at, addressof
@@ -63,8 +62,8 @@ def _enum_processes() -> t.Generator:
         OSError if CreateToolhelp32Snapshot or any winapi failed.
         IterationFinished if enumeration completed.
     """
-    lppe32          = PROCESSENTRY32()
-    lppe32.dwSize   = sizeof(PROCESSENTRY32)
+    lppe32          = PROCESSENTRY32W()
+    lppe32.dwSize   = sizeof(PROCESSENTRY32W)
     with create_snapshot(TH32CS_SNAPPROCESS) as snapshot:
         if not Process32First(snapshot, byref(lppe32)):
             report("Process32First failed.")
@@ -176,7 +175,6 @@ def setforegroundwindow(focusedwindow: tuple) -> bool:
 
 
 def refresh_window(focusedwindow: tuple, max_attempts: int = 10, interval: float = 0.5) -> None:
-    # TODO:Something error to fix.
     """
     Try to refresh window if previous window was out of focus.
 
@@ -189,18 +187,24 @@ def refresh_window(focusedwindow: tuple, max_attempts: int = 10, interval: float
 
     """
     from time import sleep
-    from itertools import combinations
-    unique = lambda *args: all(x != y for x, y in combinations(args, 2))
+
+    def unique(*args):
+        from itertools import combinations
+        if not all(len(x) == len(args[0]) for x in args):
+            return False
+
+        return all(any(i != j for i, j in zip(x, y)) for x, y in combinations(args, 2))
+
     attempts = 0
     prevwindow = ()
 
     while attempts < max_attempts:
         currentwindow = getfocusedwindow()
         if prevwindow:
-            if unique(currentwindow[0], prevwindow[0], focusedwindow[0]):
+            if unique(currentwindow, prevwindow, focusedwindow):
                 break
 
-        if focusedwindow[0] != currentwindow[0]:
+        if unique(focusedwindow, currentwindow):
             logger.info(f"Current window is {currentwindow[0]}, flash back to {focusedwindow[0]}")
             setforegroundwindow(focusedwindow)
             attempts += 1
@@ -245,7 +249,7 @@ def execute(command: str, silentstart: bool, start: bool) -> tuple:
     bInheritHandles             = False
     dwCreationFlags             = (
         DETACHED_PROCESS |
-        NORMAL_PRIORITY_CLASS |
+        IDLE_PRIORITY_CLASS |
         CREATE_NEW_PROCESS_GROUP |
         CREATE_DEFAULT_ERROR_MODE |
         CREATE_UNICODE_ENVIRONMENT
@@ -587,82 +591,129 @@ def switch_window(hwnds: list, arg: int = SW_SHOWNORMAL) -> bool:
         ShowWindow(hwnd, arg)
     return True
 
+def is_running(pid: int): ...
+
 class ProcessManager:
-    # TODO:UNDER DEVELOPMENT!!!!!! DO NOT USE!!!!
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls, *args, **kwargs):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super(ProcessManager, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self, pid: int):
-        self.mainpid = pid
-        self.datas = []
-        self.evttree = EventTree()
-        self.lock = threading.Lock()
-        self.loop = asyncio.get_event_loop()
-        self.loop.create_task(self.listener())
+        if hasattr(self, '_initialized') and self._initialized:
+            return
+        self.mainpid        = pid
+        self.datas          = []
+        self.evttree        = EventTree()
+        self.lock           = threading.Lock()
+        self.loop           = asyncio.new_event_loop()
+        self.change_event   = asyncio.Event()
+        self.kill_event     = asyncio.Event()
+        self.exit_event     = asyncio.Event()
+        self._initialized   = True
+        threading.Thread(target=self.run_loop, daemon=True).start()
+        self.loop.call_soon_threadsafe(self.grab_pids)
 
-    async def listener(self):
-        # TODO:listening grab/kill event
-        while True:
-            event = await self.get_event()
-            if event == "grab":
-                await self.grab_pids()
-            elif event == "kill":
-                await self.kill_pids()
-            await asyncio.sleep(1)
+    def run_loop(self):
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_forever()
 
-    async def get_event(self):
-        # TODO:get event
-        await asyncio.sleep(1)
-        return "grab"
+    def schedule_task(self):
+        self.loop.call_later(60, self.scheduled_grab)
+
+    def scheduled_grab(self):
+        if not self.kill_event.is_set():
+            asyncio.run_coroutine_threadsafe(self.grab_pids(), self.loop)
+            self.schedule_task()
 
     async def grab_pids(self):
-        if not IsUserAnAdmin():
-            return
-        with evt_query() as hevent:
-            events = _enum_events(hevent)
-            for content in events:
-                data = self.evttree.parse_event(content)
+        try:
+            if not IsUserAnAdmin():
+                report("Currently not running in administrator mode", statuscode=GetLastError())
+            with evt_query() as hevent:
+                events = _enum_events(hevent)
+                for content in events:
+                    data = self.evttree.parse_event(content)
+                    with self.lock:
+                        self.datas.append(data)
+                    if data.new_process_id == self.mainpid:
+                        break
                 with self.lock:
-                    self.datas.append(data)
-                if data.new_process_id == self.mainpid:
-                    break
-            self.datas = self.datas[::-1]
-            await self.build_tree()
+                    self.datas = self.datas[::-1]
+                    self.build_tree()
+        except OSError:
+            self.exit_event.set()
+            exit(1)
 
-    async def build_tree(self):
-        count = 0
-        for data in self.datas:
-            if data.process_id == self.mainpid:
-                break
-            count += 1
-        self.evttree.root = Node(self.datas[count])
-        for data in self.datas[count+1::]:
+    def build_tree(self):
+        if not self.datas:
+            return
+        self.evttree.root = Node(self.datas[0])
+        for data in self.datas[1:]:
             evtiter = self.evttree.pre_order_traversal(self.evttree.root)
             for node in evtiter:
-                if data != node.data:
+                if node.data != data:
                     continue
                 cmdline = get_cmdline(data.process_id)
-                if node.data.new_process_name not in cmdline:
+                if data.process_name not in cmdline:
                     continue
                 node.add_children(data)
-        self.logtree()
+        # self.logtree()
 
     def logtree(self):
         evtiter = self.evttree.level_order_traversal(self.evttree.root)
         for node in evtiter:
             if node is None:
-                break
+                continue
             logger.info(node.data)
 
     async def kill_pids(self):
-        # TODO:kill process by enumerating tree
         with self.lock:
             evtiter = self.evttree.post_order_traversal(self.evttree.root)
             for node in evtiter:
                 terminate_process(node.data.process_id)
-            del self.datas, self.evttree
-            self.datas, self.evttree = [], EventTree()
+            self.datas = []
+            self.evttree = EventTree()
+
+    async def handle_event(self, event_type, pid=None):
+        if event_type == "kill":
+            await self.kill_pids()
+        elif event_type == "change" and pid is not None:
+            with self.lock:
+                self.datas = []
+                self.evttree.release_tree()
+                self.mainpid = pid
+                await self.grab_pids()
 
     def start(self):
-        threading.Thread(target=self.loop.run_forever).start()
+        self.schedule_task()
+
+    def stop(self):
+        self.loop.call_soon_threadsafe(self.loop.stop)
+
+    def send_change_event(self, pid: int):
+        self.kill_event.clear()
+        self.change_event.set()
+        asyncio.run_coroutine_threadsafe(self.handle_event('change', pid), self.loop)
+
+    def send_kill_event(self):
+        self.kill_event.set()
+        self.change_event.clear()
+        asyncio.run_coroutine_threadsafe(self.handle_event('kill'), self.loop)
 
 if __name__ == '__main__':
-    PM = ProcessManager(27232)
-    PM.grab_pids()
+    import time
+    PM = ProcessManager(9196)
+    PM.start()
+    PM.logtree()
+    time.sleep(120)
+    PM.logtree()
+    p = 1234
+    PM.send_change_event(p)
+    time.sleep(60)
+    PM.send_kill_event()
+    PM.stop()

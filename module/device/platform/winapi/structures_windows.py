@@ -1,7 +1,7 @@
 from ctypes import POINTER, sizeof, Structure as _Structure
 from ctypes.wintypes import (
     HANDLE, DWORD, WORD, BYTE, BOOL, USHORT,
-    UINT, LONG, CHAR, LPWSTR, LPVOID, MAX_PATH,
+    UINT, LONG, WCHAR, LPWSTR, LPVOID, MAX_PATH,
     RECT, PULONG, POINT, PWCHAR, FILETIME as _FILETIME
 )
 
@@ -13,6 +13,7 @@ class Structure(_Structure):
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         cls.field_name = tuple(name for name, _ in cls._fields_)
+        cls.field_type = tuple(_type for _, _type in cls._fields_)
 
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
@@ -98,14 +99,12 @@ class Structure(_Structure):
         return len(self.field_name)
 
     def __dir__(self):
-        return [*super().__dir__()]
+        return super().__dir__()
 
     def __format__(self, format_spec):
         if format_spec == '':
             return str(self)
-        elif format_spec not in {'b', 'x'}:
-            raise ValueError(f"Unsupported format specifier: {format_spec}")
-        if format_spec == 'b':
+        elif format_spec == 'b':
             field_values = ', '.join(
                 f"{name}=0b{getattr(self, name):b}"
                 if isinstance(getattr(self, name), int)
@@ -121,6 +120,8 @@ class Structure(_Structure):
                 for name in self.field_name
             )
             return f"{self.__class__.__name__}({field_values})"
+        else:
+            raise ValueError(f"Unsupported format specifier: {format_spec}")
 
     def __enter__(self):
         return self
@@ -170,7 +171,7 @@ class SECURITY_ATTRIBUTES(Structure):
     ]
 
 # tlhelp32.h line 62
-class PROCESSENTRY32(Structure):
+class PROCESSENTRY32W(Structure):
     _fields_ = [
         ("dwSize",              DWORD),
         ("cntUsage",            DWORD),
@@ -181,7 +182,7 @@ class PROCESSENTRY32(Structure):
         ("th32ParentProcessID", DWORD),
         ("pcPriClassBase",      LONG),
         ("dwFlags",             DWORD),
-        ("szExeFile",           CHAR * MAX_PATH)
+        ("szExeFile",           WCHAR * MAX_PATH)
     ]
 
 class THREADENTRY32(Structure):
@@ -224,8 +225,8 @@ class RTL_USER_PROCESS_PARAMETERS(Structure):
 
 class PEB(Structure):
     _fields_ = [
-        ("Reserved",                BYTE * 28),
-        ("ProcessParameters",       POINTER(RTL_USER_PROCESS_PARAMETERS)),
+        ("Reserved",            BYTE * 28),
+        ("ProcessParameters",   POINTER(RTL_USER_PROCESS_PARAMETERS)),
     ]
 
 class PROCESS_BASIC_INFORMATION(Structure):

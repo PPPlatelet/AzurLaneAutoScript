@@ -33,6 +33,9 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 api_windows.closehandle(*self.process[:2])
                 self.process = ()
 
+        if self.hwnds:
+            self.hwnds = []
+
         self.process, self.focusedwindow = api_windows.execute(command, silentstart, start)
         return True
 
@@ -59,7 +62,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         return api_windows.get_hwnds(pid)
 
     @staticmethod
-    def get_process(instance: EmulatorInstance) -> tuple:
+    def get_process(instance: api_windows.t.Optional[EmulatorInstance]) -> tuple:
         return api_windows.get_process(instance)
 
     @staticmethod
@@ -349,7 +352,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             logger.error(e)
             raise
         except Exception as e:
-            logger.error(e)
+            logger.exception(e)
             raise
 
 
