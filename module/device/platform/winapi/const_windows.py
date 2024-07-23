@@ -1,5 +1,5 @@
 from sys import getwindowsversion
-from ctypes.wintypes import LPVOID
+from ctypes import c_void_p
 
 # winnt.h line 3961
 PROCESS_TERMINATE                   = 0x0001
@@ -257,5 +257,6 @@ EVT_VAR_TYPE_HEXINT64           = 21
 EVT_VAR_TYPE_EVTHANDLE          = 32
 EVT_VAR_TYPE_EVTXML             = 35
 
-MAXULONGLONG            = LPVOID(-1).value
+MAXULONGLONG            = c_void_p(-1).value
 INVALID_HANDLE_VALUE    = -1
+STILL_ACTIVE            = 0x00000103

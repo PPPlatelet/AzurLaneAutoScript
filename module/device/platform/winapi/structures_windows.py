@@ -1,9 +1,8 @@
-from ctypes import POINTER, sizeof, Structure as _Structure
-from ctypes.wintypes import (
-    HANDLE, DWORD, WORD, BYTE, BOOL, USHORT,
-    UINT, LONG, WCHAR, LPWSTR, LPVOID, MAX_PATH,
-    RECT, PULONG, POINT, PWCHAR, FILETIME as _FILETIME
-)
+from ctypes import \
+    POINTER, sizeof, Structure as _Structure, \
+    c_int32, c_uint32, c_uint64, c_uint16, \
+    c_wchar, c_void_p, c_ubyte, c_byte, c_long, c_ulong
+from ctypes.wintypes import MAX_PATH, FILETIME as _FILETIME
 
 class EmulatorLaunchFailedError(Exception): ...
 class HwndNotFoundError(Exception): ...
@@ -134,74 +133,88 @@ class Structure(_Structure):
 # processthreadsapi.h line 28
 class PROCESS_INFORMATION(Structure):
     _fields_ = [
-        ('hProcess',    HANDLE),
-        ('hThread',     HANDLE),
-        ('dwProcessId', DWORD),
-        ('dwThreadId',  DWORD)
+        ('hProcess',    c_void_p),
+        ('hThread',     c_void_p),
+        ('dwProcessId', c_uint32),
+        ('dwThreadId',  c_uint32)
     ]
 
 class STARTUPINFOW(Structure):
     _fields_ = [
-        ('cb',              DWORD),
-        ('lpReserved',      LPWSTR),
-        ('lpDesktop',       LPWSTR),
-        ('lpTitle',         LPWSTR),
-        ('dwX',             DWORD),
-        ('dwY',             DWORD),
-        ('dwXSize',         DWORD),
-        ('dwYSize',         DWORD),
-        ('dwXCountChars',   DWORD),
-        ('dwYCountChars',   DWORD),
-        ('dwFillAttribute', DWORD),
-        ('dwFlags',         DWORD),
-        ('wShowWindow',     WORD),
-        ('cbReserved2',     WORD),
-        ('lpReserved2',     POINTER(BYTE)),
-        ('hStdInput',       HANDLE),
-        ('hStdOutput',      HANDLE),
-        ('hStdError',       HANDLE)
+        ("cb",              c_uint32),
+        ("lpReserved",      POINTER(c_wchar)),
+        ("lpDesktop",       POINTER(c_wchar)),
+        ("lpTitle",         POINTER(c_wchar)),
+        ("dwX",             c_uint32),
+        ("dwY",             c_uint32),
+        ("dwXSize",         c_uint32),
+        ("dwYSize",         c_uint32),
+        ("dwXCountChars",   c_uint32),
+        ("dwYCountChars",   c_uint32),
+        ("dwFillAttribute", c_uint32),
+        ("dwFlags",         c_uint32),
+        ("wShowWindow",     c_uint16),
+        ("cbReserved2",     c_uint16),
+        ("lpReserved2",     POINTER(c_ubyte)),
+        ("hStdInput",       c_void_p),
+        ("hStdOutput",      c_void_p),
+        ("hStdError",       c_void_p)
     ]
 
 # minwinbase.h line 13
 class SECURITY_ATTRIBUTES(Structure):
     _fields_ = [
-        ("nLength",                 DWORD),
-        ("lpSecurityDescriptor",    LPVOID),
-        ("bInheritHandle",          BOOL)
+        ("nLength",                 c_uint32),
+        ("lpSecurityDescriptor",    c_void_p),
+        ("bInheritHandle",          c_int32)
     ]
 
 # tlhelp32.h line 62
 class PROCESSENTRY32W(Structure):
     _fields_ = [
-        ("dwSize",              DWORD),
-        ("cntUsage",            DWORD),
-        ("th32ProcessID",       DWORD),
-        ("th32DefaultHeapID",   PULONG),
-        ("th32ModuleID",        DWORD),
-        ("cntThreads",          DWORD),
-        ("th32ParentProcessID", DWORD),
-        ("pcPriClassBase",      LONG),
-        ("dwFlags",             DWORD),
-        ("szExeFile",           WCHAR * MAX_PATH)
+        ("dwSize",              c_ulong),
+        ("cntUsage",            c_ulong),
+        ("th32ProcessID",       c_ulong),
+        ("th32DefaultHeapID",   c_uint64),
+        ("th32ModuleID",        c_ulong),
+        ("cntThreads",          c_ulong),
+        ("th32ParentProcessID", c_ulong),
+        ("pcPriClassBase",      c_long),
+        ("dwFlags",             c_ulong),
+        ("szExeFile",           c_wchar * MAX_PATH)
     ]
 
 class THREADENTRY32(Structure):
     _fields_ = [
-        ("dwSize",              DWORD),
-        ("cntUsage",            DWORD),
-        ("th32ThreadID",        DWORD),
-        ("th32OwnerProcessID",  DWORD),
-        ("tpBasePri",           LONG),
-        ("tpDeltaPri",          LONG),
-        ("dwFlags",             DWORD)
+        ("dwSize",              c_ulong),
+        ("cntUsage",            c_ulong),
+        ("th32ThreadID",        c_ulong),
+        ("th32OwnerProcessID",  c_ulong),
+        ("tpBasePri",           c_long),
+        ("tpDeltaPri",          c_long),
+        ("dwFlags",             c_ulong)
+    ]
+
+class POINT(Structure):
+    _fields_ = [
+        ("x", c_long),
+        ("y", c_long)
+    ]
+
+class RECT(Structure):
+    _fields_ = [
+        ("left",    c_long),
+        ("top",     c_long),
+        ("right",   c_long),
+        ("bottom",  c_long)
     ]
 
 # winuser.h line 1801
 class WINDOWPLACEMENT(Structure):
     _fields_ = [
-        ("length",              UINT),
-        ("flags",               UINT),
-        ("showCmd",             UINT),
+        ("length",              c_uint32),
+        ("flags",               c_uint32),
+        ("showCmd",             c_uint32),
         ("ptMinPosition",       POINT),
         ("ptMaxPosition",       POINT),
         ("rcNormalPosition",    RECT)
@@ -210,36 +223,33 @@ class WINDOWPLACEMENT(Structure):
 # winternl.h line 25
 class UNICODE_STRING(Structure):
     _fields_ = [
-        ("Length",          USHORT),
-        ("MaximumLength",   USHORT),
-        ("Buffer",          PWCHAR)
+        ("Length",          c_uint16),
+        ("MaximumLength",   c_uint16),
+        ("Buffer",          POINTER(c_wchar))
     ]
 
 # winternl.h line 54
 class RTL_USER_PROCESS_PARAMETERS(Structure):
     _fields_ = [
-        ("Reserved",        LPVOID * 12),
+        ("Reserved",        c_byte * 96),
         ("ImagePathName",   UNICODE_STRING),
         ("CommandLine",     UNICODE_STRING)
     ]
 
 class PEB(Structure):
     _fields_ = [
-        ("Reserved",            BYTE * 28),
+        ("Reserved1",           c_byte * 32),
         ("ProcessParameters",   POINTER(RTL_USER_PROCESS_PARAMETERS)),
     ]
 
 class PROCESS_BASIC_INFORMATION(Structure):
-    NTSTATUS    = LONG
-    KPRIORITY   = LONG
-    KAFFINITY   = PULONG
     _fields_ = [
-        ("ExitStatus",                      NTSTATUS),
+        ("ExitStatus",                      c_int32),
         ("PebBaseAddress",                  POINTER(PEB)),
-        ("AffinityMask",                    KAFFINITY),
-        ("BasePriority",                    KPRIORITY),
-        ("UniqueProcessId",                 PULONG),
-        ("InheritedFromUniqueProcessId",    PULONG),
+        ("AffinityMask",                    c_uint64),
+        ("BasePriority",                    c_int32),
+        ("UniqueProcessId",                 c_uint64),
+        ("InheritedFromUniqueProcessId",    c_uint64),
     ]
 
 class FILETIME(Structure, _FILETIME):

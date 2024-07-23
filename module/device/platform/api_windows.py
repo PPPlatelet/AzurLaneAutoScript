@@ -187,16 +187,11 @@ def refresh_window(focusedwindow: tuple, max_attempts: int = 10, interval: float
 
     """
     from time import sleep
-
-    def unique(*args):
-        from itertools import combinations
-        if not all(len(x) == len(args[0]) for x in args):
-            return False
-
-        return all(any(i != j for i, j in zip(x, y)) for x, y in combinations(args, 2))
+    from itertools import combinations
 
     attempts = 0
     prevwindow = ()
+    unique = lambda *args: all(x[0] != y[0] for x, y in combinations(args, 2))
 
     while attempts < max_attempts:
         currentwindow = getfocusedwindow()
@@ -354,7 +349,7 @@ def get_cmdline(pid: int) -> str:
         with open_process(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, pid) as hProcess:
             # Query process infomation
             pbi = PROCESS_BASIC_INFORMATION()
-            returnlength = ULONG()
+            returnlength = ULONG(sizeof(pbi))
             status = NtQueryInformationProcess(hProcess, 0, byref(pbi), sizeof(pbi), byref(returnlength))
             if status != STATUS_SUCCESS:
                 report(f"NtQueryInformationProcess failed. Status: 0x{status:x}.", level=30)
@@ -591,7 +586,36 @@ def switch_window(hwnds: list, arg: int = SW_SHOWNORMAL) -> bool:
         ShowWindow(hwnd, arg)
     return True
 
-def is_running(pid: int): ...
+def get_parent_pid(pid: int) -> int:
+    try:
+        with open_process(PROCESS_QUERY_INFORMATION, pid) as hProcess:
+            # Query process infomation
+            pbi = PROCESS_BASIC_INFORMATION()
+            returnlength = ULONG(sizeof(pbi))
+            status = NtQueryInformationProcess(hProcess, 0, byref(pbi), returnlength, byref(returnlength))
+            if status != STATUS_SUCCESS:
+                report(f"NtQueryInformationProcess failed. Status: 0x{status:x}.", level=30)
+    except OSError:
+        return -1
+    return pbi.InheritedFromUniqueProcessId
+
+def get_exit_code(pid: int) -> int:
+    try:
+        with open_process(PROCESS_QUERY_INFORMATION, pid) as hProcess:
+            exit_code = ULONG()
+            success = GetExitCodeProcess(hProcess, byref(exit_code))
+            if not success:
+                report("Failed to get Exit code.", level=30)
+    except OSError:
+        return -1
+    return exit_code.value
+
+def is_running(ppid: int = 0, pid: int = 0) -> bool:
+    if pid and get_exit_code(pid) != STILL_ACTIVE:
+        return False
+    if ppid and ppid != get_parent_pid(pid):
+        return False
+    return True
 
 class ProcessManager:
     _instance = None
@@ -658,6 +682,8 @@ class ProcessManager:
             for node in evtiter:
                 if node.data != data:
                     continue
+                if is_running(node.data.process_id, data.process_id):
+                    break
                 cmdline = get_cmdline(data.process_id)
                 if data.process_name not in cmdline:
                     continue
@@ -706,6 +732,11 @@ class ProcessManager:
         asyncio.run_coroutine_threadsafe(self.handle_event('kill'), self.loop)
 
 if __name__ == '__main__':
+    a = get_parent_pid(29076)
+    b = get_cmdline(29076)
+    logger.info(a)
+    logger.info(b)
+    """
     import time
     PM = ProcessManager(9196)
     PM.start()
@@ -717,3 +748,4 @@ if __name__ == '__main__':
     time.sleep(60)
     PM.send_kill_event()
     PM.stop()
+    """

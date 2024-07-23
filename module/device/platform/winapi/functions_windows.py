@@ -5,17 +5,15 @@ import re
 from queue import Queue
 
 from ctypes import POINTER, WINFUNCTYPE, WinDLL, c_size_t
-from ctypes.wintypes import (
-    HANDLE, DWORD, HWND, BOOL, INT, UINT,
-    LONG, ULONG, LPWSTR, LPCWSTR, LPRECT,
+from ctypes.wintypes import \
+    HANDLE, DWORD, HWND, BOOL, INT, UINT, \
+    LONG, ULONG, LPWSTR, LPCWSTR, \
     LPVOID, LPCVOID, LPARAM, PULONG
-)
 
-from module.device.platform.winapi.structures_windows import (
-    SECURITY_ATTRIBUTES, STARTUPINFOW, WINDOWPLACEMENT,
-    PROCESS_INFORMATION, PROCESSENTRY32W, THREADENTRY32,
-    FILETIME
-)
+from module.device.platform.winapi.structures_windows import \
+    SECURITY_ATTRIBUTES, STARTUPINFOW, WINDOWPLACEMENT, \
+    PROCESS_INFORMATION, PROCESSENTRY32W, THREADENTRY32, \
+    FILETIME, RECT
 
 user32      = WinDLL(name='user32',     use_last_error=True)
 kernel32    = WinDLL(name='kernel32',   use_last_error=True)
@@ -109,7 +107,7 @@ GetParent                           = user32.GetParent
 GetParent.argtypes                  = [HWND]
 GetParent.restype                   = HWND
 GetWindowRect                       = user32.GetWindowRect
-GetWindowRect.argtypes              = [HWND, LPRECT]
+GetWindowRect.argtypes              = [HWND, POINTER(RECT)]
 GetWindowRect.restype               = BOOL
 
 EnumWindowsProc                     = WINFUNCTYPE(BOOL, HWND, LPARAM, use_last_error=True)
@@ -283,7 +281,6 @@ class QueryEvt(Handle):
         return self._handle is None
 
 class Data:
-    # TODO:UNDER DEVELOPMENT!!!!!! DO NOT USE!!!!
     def __init__(self, data: dict, time: datetime):
         self.system_time: datetime  = time
         self.new_process_id: int    = data.get("NewProcessId", 0)
@@ -305,7 +302,6 @@ class Data:
         return f"Data({attrs})"
 
 class Node:
-    # TODO:UNDER DEVELOPMENT!!!!!! DO NOT USE!!!!
     def __init__(self, data: Data = None):
         self.data = data
         self.children = []
@@ -320,7 +316,6 @@ class Node:
         self.children.append(Node(data))
 
 class EventTree:
-    # TODO:UNDER DEVELOPMENT!!!!!! DO NOT USE!!!!
     root = None
 
     @staticmethod
@@ -367,14 +362,14 @@ class EventTree:
 
 def report(
         msg: str            = '',
-        *args,
+        *args: tuple,
         statuscode: int     = -1,
         uselog: bool        = True,
         level: int          = 40,
         handle: int         = 0,
         raiseexcept: bool   = True,
         exception: type     = OSError,
-        **kwargs,
+        **kwargs: dict,
 ) -> None:
     """
     Report any exception.
