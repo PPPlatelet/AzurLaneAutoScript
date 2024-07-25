@@ -5,7 +5,7 @@ import re
 from queue import Queue
 import threading
 import time
-import functools
+from functools import wraps
 import logging
 
 from ctypes import POINTER, WINFUNCTYPE, WinDLL, c_size_t
@@ -450,7 +450,7 @@ class LogLevelManager:
 
 def Timer(timeout=1):
     def decorator(func):
-        @functools.wraps(func)
+        @wraps(func)
         def wrapper(*args, **kwargs):
             func_path = get_func_path(func)
             result = [TimeoutError(f"Function '{func_path}' timed out after {timeout} seconds")]
