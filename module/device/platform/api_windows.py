@@ -1,4 +1,3 @@
-import threading
 import asyncio
 
 from ctypes import byref, create_unicode_buffer, wstring_at, addressof

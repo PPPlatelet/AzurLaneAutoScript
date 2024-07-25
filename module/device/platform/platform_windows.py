@@ -102,8 +102,8 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 logger.warning(f'Cannot get MuMu instance index from name {instance.name}')
             self._start(f'"{exe}" -v {instance.MuMuPlayer12_id}')
         elif instance == Emulator.LDPlayerFamily:
-            # LDPlayer.exe index=0
-            self._start(f'"{exe}" index={instance.LDPlayer_id}')
+            # ldconsole.exe launch --index 0
+            self._start(f'"{Emulator.single_to_console(exe)}" launch --index {instance.LDPlayer_id}')
         elif instance == Emulator.NoxPlayerFamily:
             # Nox.exe -clone:Nox_1
             self._start(f'"{exe}" -clone:{instance.name}')
@@ -153,12 +153,12 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 rf')'
             )
         elif instance == Emulator.MuMuPlayer12:
-            # E:\Program Files\Netease\MuMu Player 12\shell\MuMuManager.exe api -v 1 shutdown_player
+            # MuMuManager.exe api -v 1 shutdown_player
             if instance.MuMuPlayer12_id is None:
                 logger.warning(f'Cannot get MuMu instance index from name {instance.name}')
             self._stop(f'"{Emulator.single_to_console(exe)}" api -v {instance.MuMuPlayer12_id} shutdown_player')
         elif instance == Emulator.LDPlayerFamily:
-            # E:\Program Files\leidian\LDPlayer9\dnconsole.exe quit --index 0
+            # ldconsole.exe quit --index 0
             self._stop(f'"{Emulator.single_to_console(exe)}" quit --index {instance.LDPlayer_id}')
         elif instance == Emulator.NoxPlayerFamily:
             # Nox.exe -clone:Nox_1 -quit
@@ -173,10 +173,10 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 rf')'
             )
         elif instance == Emulator.BlueStacks4:
-            # E:\Program Files (x86)\BluestacksCN\bsconsole.exe quit --name Android
+            # bsconsole.exe quit --name Android
             self._stop(f'"{Emulator.single_to_console(exe)}" quit --name {instance.name}')
         elif instance == Emulator.MEmuPlayer:
-            # F:\Program Files\Microvirt\MEmu\memuc.exe stop -n MEmu_0
+            # memuc.exe stop -n MEmu_0
             self._stop(f'"{Emulator.single_to_console(exe)}" stop -n {instance.name}')
         else:
             raise EmulatorUnknown(f'Cannot stop an unknown emulator instance: {instance}')
@@ -241,7 +241,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             logger.info(f'Found azurlane packages: {m}')
 
         interval = Timer(0.5).start()
-        timeout = Timer(300).start()
+        timeout = Timer(180).start()
         while 1:
             interval.wait()
             interval.reset()

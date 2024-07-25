@@ -3,6 +3,10 @@ import typing as t
 from datetime import datetime
 import re
 from queue import Queue
+import threading
+import time
+import functools
+import logging
 
 from ctypes import POINTER, WINFUNCTYPE, WinDLL, c_size_t
 from ctypes.wintypes import \
@@ -14,6 +18,8 @@ from module.device.platform.winapi.structures_windows import \
     SECURITY_ATTRIBUTES, STARTUPINFOW, WINDOWPLACEMENT, \
     PROCESS_INFORMATION, PROCESSENTRY32W, THREADENTRY32, \
     FILETIME, RECT
+
+from module.logger import logger
 
 user32      = WinDLL(name='user32',     use_last_error=True)
 kernel32    = WinDLL(name='kernel32',   use_last_error=True)
@@ -261,8 +267,8 @@ class CreateSnapshot(Handle):
     _func       = CreateToolhelp32Snapshot
     _exitfunc   = CloseHandle
 
-    def __get_init_args__(self, arg) -> tuple:
-        return arg, DWORD(0)
+    def __get_init_args__(self, access) -> tuple:
+        return access, DWORD(0)
 
     def _is_invalid_handle(self) -> bool:
         from module.device.platform.winapi.const_windows import INVALID_HANDLE_VALUE
@@ -281,8 +287,8 @@ class QueryEvt(Handle):
         return self._handle is None
 
 class Data:
-    def __init__(self, data: dict, time: datetime):
-        self.system_time: datetime  = time
+    def __init__(self, data: dict, dtime: datetime):
+        self.system_time: datetime  = dtime
         self.new_process_id: int    = data.get("NewProcessId", 0)
         self.new_process_name: str  = data.get("NewProcessName", '')
         self.process_id: int        = data.get("ProcessId", 0)
@@ -350,7 +356,7 @@ class EventTree:
         q = Queue()
         q.put(node)
         while not q.empty():
-            out = q.get()
+            out: Node = q.get()
             yield out
             if not out.children:
                 continue
@@ -421,28 +427,57 @@ def create_snapshot(arg) -> CreateSnapshot:
 def evt_query() -> QueryEvt:
     return QueryEvt()
 
-def time_it(func):
-    from time import time
-    from functools import wraps
-    from module.logger import logger
-    import logging
+def get_func_path(func: callable):
+    if not callable(func):
+        raise TypeError(f"Expected a callable, but got {type(func).__name__}")
+    module = func.__module__
+    if hasattr(func, '__qualname__'):
+        qualname = func.__qualname__
+    else:
+        qualname = func.__name__
+    return f"{module}::{qualname.replace('.', '::')}"
 
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        original_level = logger.level
-        logger.setLevel(logging.DEBUG)
+class LogLevelManager:
+    def __init__(self, new_level):
+        self.new_level = new_level
+        self.original_level = logger.level
 
-        logger.debug(f"Entering {func.__name__}")
-        start_time = time()
+    def __enter__(self):
+        logger.setLevel(self.new_level)
 
-        try:
-            result = func(*args, **kwargs)
-        finally:
-            end_time = time()
-            logger.debug(f"Exiting {func.__name__}")
-            logger.debug(f"{func.__name__} executed in {end_time - start_time:.4f} seconds")
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        logger.setLevel(self.original_level)
 
-            logger.setLevel(original_level)
+def Timer(timeout=1):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            func_path = get_func_path(func)
+            result = [TimeoutError(f"Function '{func_path}' timed out after {timeout} seconds")]
+            stop_event = threading.Event()
 
-        return result
-    return wrapper
+            with LogLevelManager(logging.DEBUG):
+                logger.debug(f"Entering {func_path}")
+                start_time = time.time()
+
+                def target():
+                    try:
+                        result[0] = func(*args, **kwargs)
+                    except Exception as e:
+                        result[0] = e
+                    finally:
+                        stop_event.set()
+
+                thread = threading.Thread(target=target, name=f"Thread-{func_path}")
+                thread.start()
+                if not stop_event.wait(timeout):
+                    raise TimeoutError(f"Function '{func_path}' timed out after {timeout} seconds")
+
+                end_time = time.time()
+                if isinstance(result[0], Exception):
+                    raise result[0]
+                logger.debug(f"Exiting {func_path}")
+                logger.debug(f"{func_path} executed in {end_time - start_time:.4f} seconds")
+            return result[0]
+        return wrapper
+    return decorator
