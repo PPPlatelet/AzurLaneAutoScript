@@ -6,7 +6,6 @@ from queue import Queue
 import threading
 import time
 from functools import wraps
-import logging
 
 from ctypes import POINTER, WINFUNCTYPE, WinDLL, c_size_t
 from ctypes.wintypes import \
@@ -427,9 +426,7 @@ def create_snapshot(arg) -> CreateSnapshot:
 def evt_query() -> QueryEvt:
     return QueryEvt()
 
-def get_func_path(func: callable):
-    if not callable(func):
-        raise TypeError(f"Expected a callable, but got {type(func).__name__}")
+def get_func_path(func):
     module = func.__module__
     if hasattr(func, '__qualname__'):
         qualname = func.__qualname__
@@ -449,9 +446,14 @@ class LogLevelManager:
         logger.setLevel(self.original_level)
 
 def Timer(timeout=1):
+    import logging
+
     def decorator(func):
+        if not callable(func):
+            raise TypeError(f"Expected a callable, but got {type(func).__name__}")
+
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(self, *args, **kwargs):
             func_path = get_func_path(func)
             result = [TimeoutError(f"Function '{func_path}' timed out after {timeout} seconds")]
             stop_event = threading.Event()
@@ -462,7 +464,7 @@ def Timer(timeout=1):
 
                 def target():
                     try:
-                        result[0] = func(*args, **kwargs)
+                        result[0] = func(self, *args, **kwargs)
                     except Exception as e:
                         result[0] = e
                     finally:
