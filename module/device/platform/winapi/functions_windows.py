@@ -105,9 +105,6 @@ ShowWindow                          = user32.ShowWindow
 ShowWindow.argtypes                 = [HWND, INT]
 ShowWindow.restype                  = BOOL
 
-IsWindow                            = user32.IsWindow
-IsWindow.argtypes                   = [HWND]
-IsWindow.restype                    = BOOL
 GetParent                           = user32.GetParent
 GetParent.argtypes                  = [HWND]
 GetParent.restype                   = HWND

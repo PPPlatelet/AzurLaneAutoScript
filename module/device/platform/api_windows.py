@@ -254,9 +254,9 @@ def execute(command: str, silentstart: bool, start: bool) -> tuple:
     lpStartupInfo.cb            = sizeof(STARTUPINFOW)
     lpStartupInfo.dwFlags       = STARTF_USESHOWWINDOW
     if start:
-        lpStartupInfo.wShowWindow   = SW_HIDE if silentstart else SW_MINIMIZE
+        lpStartupInfo.wShowWindow   = SW_FORCEMINIMIZE if silentstart else SW_MINIMIZE
     else:
-        lpStartupInfo.wShowWindow   = SW_HIDE
+        lpStartupInfo.wShowWindow   = SW_FORCEMINIMIZE
     lpProcessInformation        = PROCESS_INFORMATION()
 
     success                     = CreateProcessW(
@@ -390,9 +390,8 @@ def kill_process_by_regex(regex: str) -> int:
     """
     count = 0
 
-    processes = _enum_processes()
     try:
-        for lppe32 in processes:
+        for lppe32 in _enum_processes():
             pid     = lppe32.th32ProcessID
             cmdline = get_cmdline(lppe32.th32ProcessID)
             if not re.search(regex, cmdline):
@@ -401,7 +400,6 @@ def kill_process_by_regex(regex: str) -> int:
             terminate_process(pid)
             count += 1
     except IterationFinished:
-        processes.close()
         return count
 
 
@@ -478,9 +476,8 @@ def get_thread(pid: int) -> int:
     """
     mainthreadid    = 0
     minstarttime    = MAXULONGLONG
-    threads         = _enum_threads()
     try:
-        for lpte32 in threads:
+        for lpte32 in _enum_threads():
             if lpte32.th32OwnerProcessID != pid:
                 continue
 
@@ -492,7 +489,6 @@ def get_thread(pid: int) -> int:
             minstarttime = threadstarttime
             mainthreadid = lpte32.th32ThreadID
     except IterationFinished:
-        threads.close()
         return mainthreadid
 
 
@@ -539,8 +535,7 @@ def get_process(instance: EmulatorInstance) -> tuple:
         OSError if any winapi failed.
         IterationFinished if enumeration completed.
     """
-    processes = _enum_processes()
-    for lppe32 in processes:
+    for lppe32 in _enum_processes():
         pid = lppe32.th32ProcessID
         cmdline = get_cmdline(pid)
         if not instance.path in cmdline:
@@ -548,17 +543,14 @@ def get_process(instance: EmulatorInstance) -> tuple:
         if instance == Emulator.MuMuPlayer12:
             match = re.search(r'-v\s*(\d+)', cmdline)
             if match and int(match.group(1)) == instance.MuMuPlayer12_id:
-                processes.close()
                 return _get_process(pid)
         elif instance == Emulator.LDPlayerFamily:
             match = re.search(r'index=\s*(\d+)', cmdline)
             if match and int(match.group(1)) == instance.LDPlayer_id:
-                processes.close()
                 return _get_process(pid)
         else:
             matchname = re.search(fr'{instance.name}(\s+|$)', cmdline)
             if matchname and matchname.group(0).strip() == instance.name:
-                processes.close()
                 return _get_process(pid)
 
 
@@ -574,9 +566,7 @@ def switch_window(hwnds: list, arg: int = SW_SHOWNORMAL) -> bool:
         bool:
     """
     for hwnd in hwnds:
-        if not IsWindow(hwnd):
-            continue
-        if GetParent(hwnd):
+        if GetParent(hwnd) is not None:
             continue
         rect = RECT()
         GetWindowRect(hwnd, byref(rect))
