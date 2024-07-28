@@ -441,6 +441,14 @@ class AzurLaneAutoScript:
             if self.config.should_reload():
                 return False
 
+    def emurestart(self, task):
+        logger.warning('Emulator is not running')
+        self.device.emulator_stop()
+        self.device.emulator_start()
+        if task != 'Restart':
+            self.run('start')
+        del_cached_property(self, 'config')
+
     def get_next_task(self):
         """
         Returns:
@@ -454,43 +462,74 @@ class AzurLaneAutoScript:
             from module.base.resource import release_resources
             if self.config.task.command != 'Alas':
                 release_resources(next_task=task.command)
+                
+            if task.next_run <= datetime.now():
+                break
 
-            if task.next_run > datetime.now():
-                logger.info(f'Wait until {task.next_run} for task `{task.command}`')
-                self.is_first_task = False
-                method = self.config.Optimization_WhenTaskQueueEmpty
-                if method == 'close_game':
-                    logger.info('Close game during wait')
-                    self.device.app_stop()
-                    release_resources()
-                    self.device.release_during_wait()
-                    if not self.wait_until(task.next_run):
-                        del_cached_property(self, 'config')
-                        continue
-                    if task.command != 'Restart':
-                        self.run('start')
-                elif method == 'goto_main':
-                    logger.info('Goto main page during wait')
-                    self.run('goto_main')
-                    release_resources()
-                    self.device.release_during_wait()
-                    if not self.wait_until(task.next_run):
-                        del_cached_property(self, 'config')
-                        continue
-                elif method == 'stay_there':
-                    logger.info('Stay there during wait')
-                    release_resources()
-                    self.device.release_during_wait()
-                    if not self.wait_until(task.next_run):
-                        del_cached_property(self, 'config')
-                        continue
-                else:
-                    logger.warning(f'Invalid Optimization_WhenTaskQueueEmpty: {method}, fallback to stay_there')
-                    release_resources()
-                    self.device.release_during_wait()
-                    if not self.wait_until(task.next_run):
-                        del_cached_property(self, 'config')
-                        continue
+            logger.info(f'Wait until {task.next_run} for task `{task.command}`')
+            self.is_first_task = False
+            
+            method: str             = self.config.Optimization_WhenTaskQueueEmpty
+            remainingtime: float    = (task.next_run - datetime.now()).total_seconds() / 60
+            buffertime: int         = self.config.Optimization_ProcessBufferTime
+            if (
+                method == 'stop_emulator' and
+                self.device.emulator_check() and
+                remainingtime <= buffertime
+            ):
+                method = self.config.Optimization_BufferMethod
+                logger.info(
+                    f"The time to next task `{task.command}` is {remainingtime:.2f} minutes, "
+                    f"less than {buffertime} minutes, fallback to {method}"
+                )
+
+            if method == 'close_game':
+                logger.info('Close game during wait')
+                self.device.app_stop()
+                release_resources()
+                self.device.release_during_wait()
+                if not self.wait_until(task.next_run):
+                    del_cached_property(self, 'config')
+                    continue
+                if task.command != 'Restart':
+                    self.run('start')
+            elif method == 'goto_main':
+                logger.info('Goto main page during wait')
+                self.run('goto_main')
+                release_resources()
+                self.device.release_during_wait()
+                if not self.wait_until(task.next_run):
+                    del_cached_property(self, 'config')
+                    continue
+            elif method == 'stay_there':
+                logger.info('Stay there during wait')
+                release_resources()
+                self.device.release_during_wait()
+                if not self.wait_until(task.next_run):
+                    del_cached_property(self, 'config')
+                    continue
+            elif method == 'stop_emulator':
+                logger.info('Stop emulator during wait')
+                self.device.emulator_stop()
+                release_resources() 
+                self.device.release_during_wait()
+                if not self.wait_until(task.next_run):
+                    del_cached_property(self, 'config')
+                    method: str = self.config.Optimization_WhenTaskQueueEmpty
+                    if (
+                        not self.device.emulator_check() and
+                        method != 'stop_emulator'
+                    ):
+                        self.emurestart(task.command)
+                    continue
+            else:
+                logger.warning(f'Invalid Optimization_WhenTaskQueueEmpty: {method}, fallback to stay_there')
+                release_resources()
+                self.device.release_during_wait()
+                if not self.wait_until(task.next_run):
+                    del_cached_property(self, 'config')
+                    continue
+
             break
 
         AzurLaneConfig.is_hoarding_task = False
@@ -517,10 +556,13 @@ class AzurLaneAutoScript:
                 del_cached_property(self, 'config')
                 logger.info('Server or network is recovered. Restart game client')
                 self.config.task_call('Restart')
-            # Get task
-            task = self.get_next_task()
             # Init device and change server
             _ = self.device
+            # Get task
+            task = self.get_next_task()
+            # Reboot emulator
+            if not self.device.emulator_check():
+                self.emurestart(task)
             self.device.config = self.config
             # Skip first restart
             if self.is_first_task and task == 'Restart':
