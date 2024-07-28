@@ -212,6 +212,7 @@ def refresh_window(focusedwindow: tuple, max_attempts: int = 10, interval: float
 
 def execute(command: str, silentstart: bool, start: bool) -> tuple:
     # TODO:Create Process with non-administrator privileges
+    # TODO:Communicate with process.
     """
     Create a new process.
 
@@ -293,7 +294,7 @@ def terminate_process(pid: int) -> bool:
         OSError if OpenProcess failed.
     """
     with open_process(PROCESS_TERMINATE, pid) as hProcess:
-        if TerminateProcess(hProcess, 0) == 0:
+        if not TerminateProcess(hProcess, 0):
             report("Failed to kill process.")
     return True
 
@@ -326,7 +327,7 @@ def get_hwnds(pid: int) -> list:
 
     if not hwnds:
         logger.error("Hwnd not found!")
-        logger.error("1.Perhaps emulator was killed.")
+        logger.error("1.Perhaps emulator has been killed.")
         logger.error("2.Environment has something wrong. Please check the running environment.")
         report("Hwnd not found.", exception=HwndNotFoundError)
     return hwnds
