@@ -1,8 +1,5 @@
 from abc import ABCMeta, abstractmethod
 import typing as t
-from datetime import datetime
-import re
-from queue import Queue
 import threading
 import time
 from functools import wraps
@@ -23,50 +20,6 @@ from module.logger import logger
 user32      = WinDLL(name='user32',     use_last_error=True)
 kernel32    = WinDLL(name='kernel32',   use_last_error=True)
 ntdll       = WinDLL(name='ntdll',      use_last_error=True)
-wevtapi     = WinDLL(name='wevtapi',    use_last_error=True)
-shell32     = WinDLL(name='shell32',    use_last_error=True)
-advapi32    = WinDLL(name='advapi32',   use_last_error=True)
-userenv     = WinDLL(name='userenv',    use_last_error=True)
-
-OpenProcessToken                    = advapi32.OpenProcessToken
-OpenProcessToken.argtypes           = [HANDLE, DWORD, POINTER(HANDLE)]
-OpenProcessToken.restype            = LONG
-
-IsUserAnAdmin                       = shell32.IsUserAnAdmin
-IsUserAnAdmin.argtypes              = []
-IsUserAnAdmin.restype               = BOOL
-
-DuplicateTokenEx                    = advapi32.DuplicateTokenEx
-DuplicateTokenEx.argtypes           = [HANDLE, DWORD, POINTER(LPVOID), ULONG, ULONG, POINTER(HANDLE)]
-DuplicateTokenEx.restype            = LONG
-
-CreateProcessAsUserW                = advapi32.CreateProcessAsUserW
-CreateProcessAsUserW.argtypes       = [
-    HANDLE,                         # hToken
-    LPCWSTR,                        # lpApplicationName
-    LPWSTR,                         # lpCommandLine
-    POINTER(SECURITY_ATTRIBUTES),   # lpProcessAttributes
-    POINTER(SECURITY_ATTRIBUTES),   # lpThreadAttributes
-    BOOL,                           # bInheritHandles
-    DWORD,                          # dwCreationFlags
-    LPVOID,                         # lpEnvironment
-    LPCWSTR,                        # lpCurrentDirectory
-    POINTER(STARTUPINFOW),          # lpStartupInfo
-    POINTER(PROCESS_INFORMATION)    # lpProcessInformation
-]
-CreateProcessAsUserW.restype        = BOOL
-
-GetCurrentProcess                   = kernel32.GetCurrentProcess
-GetCurrentProcess.argtypes          = []
-GetCurrentProcess.restype           = HANDLE
-
-CreateEnvironmentBlock              = userenv.CreateEnvironmentBlock
-CreateEnvironmentBlock.argtypes     = [POINTER(LPVOID), HANDLE, BOOL]
-CreateEnvironmentBlock.restype      = BOOL
-
-DestroyEnvironmentBlock             = userenv.DestroyEnvironmentBlock
-DestroyEnvironmentBlock.argtypes    = [LPVOID]
-DestroyEnvironmentBlock.restype     = BOOL
 
 CreateProcessW                      = kernel32.CreateProcessW
 CreateProcessW.argtypes             = [
@@ -168,10 +121,6 @@ GetThreadTimes.argtypes             = [
 ]
 GetThreadTimes.restype              = BOOL
 
-GetExitCodeProcess                  = kernel32.GetExitCodeProcess
-GetExitCodeProcess.argtypes         = [HANDLE, POINTER(DWORD)]
-GetExitCodeProcess.restype          = BOOL
-
 GetLastError                        = kernel32.GetLastError
 GetLastError.argtypes               = []
 GetLastError.restype                = DWORD
@@ -184,23 +133,6 @@ ReadProcessMemory.restype           = BOOL
 NtQueryInformationProcess           = ntdll.NtQueryInformationProcess
 NtQueryInformationProcess.argtypes  = [HANDLE, INT, LPVOID, ULONG, PULONG]
 NtQueryInformationProcess.restype   = NTSTATUS
-
-EVT_HANDLE                          = HANDLE
-EvtQuery                            = wevtapi.EvtQuery
-EvtQuery.argtypes                   = [EVT_HANDLE, LPCWSTR, LPCWSTR, DWORD]
-EvtQuery.restype                    = HANDLE
-
-EvtNext                             = wevtapi.EvtNext
-EvtNext.argtypes                    = [EVT_HANDLE, DWORD, POINTER(EVT_HANDLE), DWORD, DWORD, POINTER(DWORD)]
-EvtNext.restype                     = BOOL
-
-EvtRender                           = wevtapi.EvtRender
-EvtRender.argtypes                  = [EVT_HANDLE, EVT_HANDLE, DWORD, DWORD, LPVOID, POINTER(DWORD), POINTER(DWORD)]
-EvtRender.restype                   = BOOL
-
-EvtClose                            = wevtapi.EvtClose
-EvtClose.argtypes                   = [EVT_HANDLE]
-EvtClose.restype                    = BOOL
 
 class Handle(metaclass=ABCMeta):
     """
@@ -267,98 +199,6 @@ class CreateSnapshot(Handle):
         from module.device.platform.winapi.const_windows import INVALID_HANDLE_VALUE
         return self._handle == INVALID_HANDLE_VALUE
 
-class QueryEvt(Handle):
-    _func       = EvtQuery
-    _exitfunc   = EvtClose
-
-    def __get_init_args__(self):
-        query = "Event/System[EventID=4688]"
-        from module.device.platform.winapi.const_windows import EVT_QUERY_REVERSE_DIRECTION, EVT_QUERY_CHANNEL_PATH
-        return None, "Security", query, EVT_QUERY_REVERSE_DIRECTION | EVT_QUERY_CHANNEL_PATH
-
-    def _is_invalid_handle(self):
-        return self._handle is None
-
-class Data:
-    def __init__(self, data: dict, dtime: datetime):
-        self.system_time: datetime  = dtime
-        self.new_process_id: int    = data.get("NewProcessId", 0)
-        self.new_process_name: str  = data.get("NewProcessName", '')
-        self.process_id: int        = data.get("ProcessId", 0)
-        self.process_name: str      = data.get("ParentProcessName", '')
-
-    def __eq__(self, other):
-        if isinstance(other, Data):
-            return self.new_process_id == other.process_id
-        return NotImplemented
-
-    def __str__(self):
-        attrs = ', '.join(f"{key}={value}" for key, value in self.__dict__.items())
-        return f"Data({attrs})"
-
-    def __repr__(self):
-        attrs = ', '.join(f"{key}={value!r}" for key, value in self.__dict__.items())
-        return f"Data({attrs})"
-
-class Node:
-    def __init__(self, data: Data = None):
-        self.data = data
-        self.children = []
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}(data={self.data!r})"
-
-    def __str__(self) -> str:
-        return f"{self.__class__.__name__}(data={self.data})"
-
-    def add_children(self, data):
-        self.children.append(Node(data))
-
-class EventTree:
-    root = None
-
-    @staticmethod
-    def parse_event(event: str):
-        import xml.etree.ElementTree as Et
-        ns              = {'ns': 'http://schemas.microsoft.com/win/2004/08/events/event'}
-        root            = Et.fromstring(event)
-        system_time_str = root.find('.//ns:TimeCreated', ns).attrib['SystemTime']
-        match           = re.match(r'(.*\.\d{6})\d?(Z)', system_time_str)
-        modifiedtime    = match.group(1) + match.group(2) if match else system_time_str
-        system_time     = datetime.strptime(modifiedtime, '%Y-%m-%dT%H:%M:%S.%f%z').astimezone()
-
-        fields          = ["NewProcessId", "NewProcessName", "ProcessId", "ParentProcessName"]
-        data            = {field: fstr(root.find(f'.//ns:Data[@Name="{field}"]', ns).text) for field in fields}
-
-        return Data(data, system_time)
-
-    def pre_order_traversal(self, node: Node):
-        if node is not None:
-            yield node
-            for child in node.children:
-                yield from self.pre_order_traversal(child)
-
-    def post_order_traversal(self, node: Node):
-        if node is not None:
-            for child in node.children:
-                yield from self.post_order_traversal(child)
-            yield node
-
-    @staticmethod
-    def level_order_traversal(node: Node):
-        q = Queue()
-        q.put(node)
-        while not q.empty():
-            out: Node = q.get()
-            yield out
-            if not out.children:
-                continue
-            for child in out.children:
-                q.put(child)
-
-    def release_tree(self):
-        self.root = None
-
 def report(
         msg: str            = '',
         *args: tuple,
@@ -416,9 +256,6 @@ def open_thread(access, tid, uselog=False, raiseexcept=True) -> ThreadHandle:
 
 def create_snapshot(arg) -> CreateSnapshot:
     return CreateSnapshot(arg)
-
-def evt_query() -> QueryEvt:
-    return QueryEvt()
 
 def get_func_path(func):
     module = func.__module__

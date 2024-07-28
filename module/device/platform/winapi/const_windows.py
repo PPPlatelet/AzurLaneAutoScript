@@ -224,47 +224,9 @@ ERROR_NO_MORE_FILES = 0x12
 
 # winerror.h
 ERROR_SUCCESS               = 0     # line 227
-ERROR_INSUFFICIENT_BUFFER   = 122   # line 1041
 
 # winbase.h line 822
 INFINITE = 0xFFFFFFFF
 
-# winevt.h line 156
-EVT_QUERY_CHANNEL_PATH          = 0x1
-EVT_QUERY_FILE_PATH             = 0x2
-EVT_QUERY_FORWARD_DIRECTION     = 0x100
-EVT_QUERY_REVERSE_DIRECTION     = 0x200
-EVT_QUERY_TOLERATE_QUERY_ERRORS = 0x1000
-# line 176
-EVT_RENDER_EVENT_VALUES = 0
-EVT_RENDER_EVENT_XML    = 1
-EVT_RENDER_BOOK_MARK    = 2
-# line 242
-EVT_VAR_TYPE_NULL               = 0
-EVT_VAR_TYPE_STRING             = 1
-EVT_VAR_TYPE_ANSISTRING         = 2
-EVT_VAR_TYPE_SBYTE              = 3
-EVT_VAR_TYPE_BYTE               = 4
-EVT_VAR_TYPE_INT16              = 5
-EVT_VAR_TYPE_UINT16             = 6
-EVT_VAR_TYPE_INT32              = 7
-EVT_VAR_TYPE_UINT32             = 8
-EVT_VAR_TYPE_INT64              = 9
-EVT_VAR_TYPE_UINT64             = 10
-EVT_VAR_TYPE_SINGLE             = 11
-EVT_VAR_TYPE_DOUBLE             = 12
-EVT_VAR_TYPE_BOOLEAN            = 13
-EVT_VAR_TYPE_BINARY             = 14
-EVT_VAR_TYPE_GUID               = 15
-EVT_VAR_TYPE_SIZET              = 16
-EVT_VAR_TYPE_FILETIME           = 17
-EVT_VAR_TYPE_SYSTIME            = 18
-EVT_VAR_TYPE_SID                = 19
-EVT_VAR_TYPE_HEXINT32           = 20
-EVT_VAR_TYPE_HEXINT64           = 21
-EVT_VAR_TYPE_EVTHANDLE          = 32
-EVT_VAR_TYPE_EVTXML             = 35
-
 MAXULONGLONG            = c_void_p(-1).value
 INVALID_HANDLE_VALUE    = -1
-STILL_ACTIVE            = 0x00000103
