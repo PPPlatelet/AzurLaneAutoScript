@@ -17,10 +17,7 @@ class Structure(_Structure):
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
             return NotImplemented
-        for name in self.field_name:
-            if getattr(self, name) != getattr(other, name):
-                return False
-        return True
+        return all(getattr(self, name) == getattr(other, name) for name in self.field_name)
 
     def __repr__(self):
         field_values = ', '.join(f"{name}={getattr(self, name)!r}" for name in self.field_name)
@@ -129,6 +126,9 @@ class Structure(_Structure):
 
     def __bytes__(self):
         return bytes(str(self), 'utf-8')
+
+    def __bool__(self):
+        return any(getattr(self, name) for name in self.field_name)
 
 # processthreadsapi.h line 28
 class PROCESS_INFORMATION(Structure):

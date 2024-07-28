@@ -223,7 +223,7 @@ def execute(command: str, silentstart: bool, start: bool) -> tuple:
             '"E:\\Program Files\\Netease\\MuMu Player 12\\shell\\MuMuPlayer.exe" -v 1'
 
     Returns:
-        process: tuple(processhandle, threadhandle, processid, mainthreadid),
+        process: PROCESS_INFORMATION,
         focusedwindow: tuple(hwnd, WINDOWPLACEMENT)
 
     Raises:
@@ -279,7 +279,7 @@ def execute(command: str, silentstart: bool, start: bool) -> tuple:
         return lpProcessInformation, focusedwindow
     else:
         closehandle(lpProcessInformation.hProcess, lpProcessInformation.hThread)
-        return (), focusedwindow
+        return None, focusedwindow
 
 
 def terminate_process(pid: int) -> bool:
@@ -492,7 +492,7 @@ def get_thread(pid: int) -> int:
         return mainthreadid
 
 
-def _get_process(pid: int) -> tuple:
+def _get_process(pid: int) -> PROCESS_INFORMATION:
     """
     Get emulator's handle.
 
@@ -514,12 +514,12 @@ def _get_process(pid: int) -> tuple:
             CloseHandle(hProcess)
             report("OpenThread failed.", level=30)
 
-        return hProcess, hThread, pid, tid
+        return PROCESS_INFORMATION(hProcess, hThread, pid, tid)
     except Exception as e:
         logger.warning(f"Failed to get process and thread handles: {e}")
-        return None, None, pid, tid
+        return PROCESS_INFORMATION(None, None, pid, tid)
 
-def get_process(instance: EmulatorInstance) -> tuple:
+def get_process(instance: EmulatorInstance) -> PROCESS_INFORMATION:
     """
     Get emulator's process.
 
@@ -566,11 +566,7 @@ def switch_window(hwnds: list, arg: int = SW_SHOWNORMAL) -> bool:
         bool:
     """
     for hwnd in hwnds:
-        if GetParent(hwnd) is not None:
-            continue
-        rect = RECT()
-        GetWindowRect(hwnd, byref(rect))
-        if {rect.left, rect.top, rect.right, rect.bottom} == {0}:
+        if not GetWindow(hwnd, GW_CHILD):
             continue
         ShowWindow(hwnd, arg)
     return True
@@ -648,8 +644,7 @@ class ProcessManager:
             if not IsUserAnAdmin():
                 report("Currently not running in administrator mode", statuscode=GetLastError())
             with evt_query() as hevent:
-                events = _enum_events(hevent)
-                for content in events:
+                for content in _enum_events(hevent):
                     data = self.evttree.parse_event(content)
                     with self.lock:
                         self.datas.append(data)

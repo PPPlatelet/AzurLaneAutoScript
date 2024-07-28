@@ -16,7 +16,7 @@ from ctypes.wintypes import \
 from module.device.platform.winapi.structures_windows import \
     SECURITY_ATTRIBUTES, STARTUPINFOW, WINDOWPLACEMENT, \
     PROCESS_INFORMATION, PROCESSENTRY32W, THREADENTRY32, \
-    FILETIME, RECT
+    FILETIME
 
 from module.logger import logger
 
@@ -105,12 +105,9 @@ ShowWindow                          = user32.ShowWindow
 ShowWindow.argtypes                 = [HWND, INT]
 ShowWindow.restype                  = BOOL
 
-GetParent                           = user32.GetParent
-GetParent.argtypes                  = [HWND]
-GetParent.restype                   = HWND
-GetWindowRect                       = user32.GetWindowRect
-GetWindowRect.argtypes              = [HWND, POINTER(RECT)]
-GetWindowRect.restype               = BOOL
+GetWindow                           = user32.GetWindow
+GetWindow.argtypes                  = [HWND, UINT]
+GetWindow.restype                   = HWND
 
 EnumWindowsProc                     = WINFUNCTYPE(BOOL, HWND, LPARAM, use_last_error=True)
 EnumWindows                         = user32.EnumWindows
