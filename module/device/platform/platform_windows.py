@@ -1,3 +1,5 @@
+import typing as t
+
 from module.base.decorator import run_once
 from module.base.timer import Timer
 from module.device.connection import AdbDeviceWithStatus
@@ -13,6 +15,8 @@ class EmulatorUnknown(Exception):
 
 class PlatformWindows(PlatformBase, EmulatorManager):
     # Quadruple, contains the kernel process object, kernel thread object, process ID and thread ID.
+    # If the kernel process object and kernel thread object are no longer used, PLEASE USE CloseHandle.
+    # Otherwise, it'll crash the system in some cases.
     process                 = None
     # Window handles of the target process.
     hwnds: list             = []
@@ -62,7 +66,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         return api_windows.get_hwnds(pid)
 
     @staticmethod
-    def get_process(instance: api_windows.t.Optional[EmulatorInstance]) -> api_windows.PROCESS_INFORMATION:
+    def get_process(instance: t.Optional[EmulatorInstance]) -> api_windows.PROCESS_INFORMATION:
         return api_windows.get_process(instance)
 
     @staticmethod
