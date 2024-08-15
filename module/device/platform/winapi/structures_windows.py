@@ -27,10 +27,6 @@ class Structure(_Structure):
         field_values = ', '.join(f"{name}={getattr(self, name)}" for name in self.field_name)
         return f"{self.__class__.__name__}({field_values})"
 
-    def __hash__(self):
-        field_values = tuple(getattr(self, name) for name in self.field_name)
-        return hash((self.__class__, field_values))
-
     def __sizeof__(self):
         return sizeof(self)
 
@@ -46,6 +42,8 @@ class Structure(_Structure):
             for i, val in zip(indices, value):
                 setattr(self, self.field_name[i], val)
         elif isinstance(key, int):
+            if key < 0:
+                key += len(self)
             if key < 0 or key >= len(self):
                 raise IndexError("Index out of range")
             setattr(self, self.field_name[key], value)
@@ -61,6 +59,8 @@ class Structure(_Structure):
             indices = range(*item.indices(len(self)))
             return [getattr(self, self.field_name[i]) for i in indices]
         elif isinstance(item, int):
+            if item < 0:
+                item += len(self)
             if item < 0 or item >= len(self):
                 raise IndexError("Index out of range")
             return getattr(self, self.field_name[item])
@@ -71,26 +71,6 @@ class Structure(_Structure):
         else:
             raise TypeError("Invalid argument type")
 
-    def __contains__(self, item):
-        return item in self.field_name
-
-    def __copy__(self):
-        cls = self.__class__
-        result = cls.__new__(cls)
-        result.__dict__.update(self.__dict__)
-        return result
-
-    def __deepcopy__(self, memodict=None):
-        import copy as cp
-        if memodict is None:
-            memodict = {}
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memodict[id(self)] = result
-        for name in self.field_name:
-            setattr(result, name, cp.deepcopy(getattr(self, name), memodict))
-        return result
-
     def __len__(self):
         return len(self.field_name)
 
@@ -100,21 +80,25 @@ class Structure(_Structure):
     def __format__(self, format_spec):
         if format_spec == '':
             return str(self)
-        elif format_spec == 'b':
-            field_values = ', '.join(
-                f"{name}=0b{getattr(self, name):b}"
-                if isinstance(getattr(self, name), int)
-                else f"{name}={getattr(self, name)}"
-                for name in self.field_name
-            )
+        elif format_spec in ('b', 'B'):
+            field_values: list = []
+            for name in self.field_name:
+                value = getattr(self, name)
+                if isinstance(value, int):
+                    field_values.append(f"{name}=0b"+f"{value:b}".upper())
+                else:
+                    field_values.append(f"{name}={value}")
+            field_values: str = ', '.join(field_values)
             return f"{self.__class__.__name__}({field_values})"
-        elif format_spec == 'x':
-            field_values = ', '.join(
-                f"{name}=0x{getattr(self, name):x}"
-                if isinstance(getattr(self, name), int)
-                else f"{name}={getattr(self, name)}"
-                for name in self.field_name
-            )
+        elif format_spec in ('x', 'X'):
+            field_values: list = []
+            for name in self.field_name:
+                value = getattr(self, name)
+                if isinstance(value, int):
+                    field_values.append(f"{name}=0x"+f"{value:x}".upper())
+                else:
+                    field_values.append(f"{name}={value}")
+            field_values: str = ', '.join(field_values)
             return f"{self.__class__.__name__}({field_values})"
         else:
             raise ValueError(f"Unsupported format specifier: {format_spec}")

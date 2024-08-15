@@ -157,10 +157,10 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 rf')'
             )
         elif instance == Emulator.MuMuPlayer12:
-            # MuMuManager.exe api -v 1 shutdown_player
+            # MuMuManager.exe control -v 1 shutdown
             if instance.MuMuPlayer12_id is None:
                 logger.warning(f'Cannot get MuMu instance index from name {instance.name}')
-            self._stop(f'"{Emulator.single_to_console(exe)}" api -v {instance.MuMuPlayer12_id} shutdown_player')
+            self._stop(f'"{Emulator.single_to_console(exe)}" control -v {instance.MuMuPlayer12_id} shutdown')
         elif instance == Emulator.LDPlayerFamily:
             # ldconsole.exe quit --index 0
             self._stop(f'"{Emulator.single_to_console(exe)}" quit --index {instance.LDPlayer_id}')
@@ -185,7 +185,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         else:
             raise EmulatorUnknown(f'Cannot stop an unknown emulator instance: {instance}')
 
-    def _emulator_function_wrapper(self, func: callable):
+    def _emulator_function_wrapper(self, func: t.Callable):
         """
         Args:
             func (callable): _emulator_start or _emulator_stop
