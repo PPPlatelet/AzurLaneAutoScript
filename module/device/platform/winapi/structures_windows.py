@@ -239,3 +239,15 @@ class PROCESS_BASIC_INFORMATION(Structure):
 class FILETIME(Structure, _FILETIME):
     def to_int(self):
         return (self.dwHighDateTime << 32) + self.dwLowDateTime
+
+class SID_AND_ATTRIBUTES(Structure):
+    _fields_ = [
+        ("Sid",         c_void_p),
+        ("Attributes",  c_ulong),
+    ]
+
+class TOKEN_GROUPS(Structure):
+    _fields_ = [
+        ("GroupCount",  c_ulong),
+        ("Groups",      SID_AND_ATTRIBUTES * 1),
+    ]

@@ -7,7 +7,7 @@ import threading
 from ctypes import WinDLL, POINTER, byref, create_unicode_buffer
 from ctypes.wintypes import HANDLE, LPCWSTR, DWORD, BOOL, LPVOID
 
-from module.device.platform.winapi.functions_windows import _Handle, fstr, GetLastError, report, IsUserAnAdmin
+from module.device.platform.winapi.functions_windows import Handle_, fstr, GetLastError, report, IsUserAnAdmin
 from module.device.platform.winapi.const_windows import INFINITE, INVALID_HANDLE_VALUE, ERROR_SUCCESS
 from module.device.platform.api_windows import is_running, get_cmdline, terminate_process
 from module.logger import logger
@@ -42,18 +42,19 @@ EvtClose                            = wevtapi.EvtClose
 EvtClose.argtypes                   = [EVT_HANDLE]
 EvtClose.restype                    = BOOL
 
-class QueryEvt(_Handle):
+class QueryEvt(Handle_):
     _func       = EvtQuery
     _exitfunc   = EvtClose
 
-    def __get_init_args__(self):
+    @staticmethod
+    def __get_init_args__():
         query = "Event/System[EventID=4688]"
         return None, "Security", query, EVT_QUERY_REVERSE_DIRECTION | EVT_QUERY_CHANNEL_PATH
 
     def _is_invalid_handle(self):
         return self._handle is None
 
-class Data:
+class EvtData:
     def __init__(self, data: dict, dtime: datetime):
         self.system_time: datetime  = dtime
         self.new_process_id: int    = data.get("NewProcessId", 0)
@@ -62,7 +63,7 @@ class Data:
         self.process_name: str      = data.get("ParentProcessName", '')
 
     def __eq__(self, other):
-        if isinstance(other, Data):
+        if isinstance(other, EvtData):
             return self.new_process_id == other.process_id
         return NotImplemented
 
@@ -75,7 +76,7 @@ class Data:
         return f"{self.__class__.__name__}({attrs})"
 
 class Node:
-    def __init__(self, data: Data = None):
+    def __init__(self, data: EvtData = None):
         self.data = data
         self.children = []
 
@@ -104,7 +105,7 @@ class EventTree:
         fields          = ["NewProcessId", "NewProcessName", "ProcessId", "ParentProcessName"]
         data            = {field: fstr(root.find(f'.//ns:Data[@Name="{field}"]', ns).text) for field in fields}
 
-        return Data(data, system_time)
+        return EvtData(data, system_time)
 
     def pre_order_traversal(self, node: Node):
         if node is not None:
@@ -132,6 +133,10 @@ class EventTree:
 
     def release_tree(self):
         self.root = None
+
+    def init_tree(self, data: EvtData):
+        self.root = Node(data)
+        return True
 
 def evt_query() -> QueryEvt:
     return QueryEvt()
@@ -243,7 +248,7 @@ class ProcessManager:
     def build_tree(self):
         if not self.datas:
             return
-        self.evttree.root = Node(self.datas[0])
+        self.evttree.init_tree(self.datas[0])
         for data in self.datas[1:]:
             evtiter = self.evttree.pre_order_traversal(self.evttree.root)
             for node in evtiter:

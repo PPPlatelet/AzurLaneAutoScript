@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-import typing as t
+from typing import Union
 import time
 from functools import wraps
 
@@ -12,7 +12,7 @@ from ctypes.wintypes import \
 from module.device.platform.winapi.structures_windows import \
     SECURITY_ATTRIBUTES, STARTUPINFOW, WINDOWPLACEMENT, \
     PROCESS_INFORMATION, PROCESSENTRY32W, THREADENTRY32, \
-    FILETIME
+    FILETIME, TOKEN_GROUPS
 from module.logger import logger
 
 user32      = WinDLL(name='user32',     use_last_error=True)
@@ -40,38 +40,63 @@ DuplicateTokenEx.argtypes           = [
 ]
 DuplicateTokenEx.restype            = LONG
 
-CreateProcessAsUserW                = advapi32.CreateProcessWithTokenW
-CreateProcessAsUserW.argtypes       = [
-    HANDLE,                         #hToken
-    LPCWSTR,                        #lpApplicationName
-    LPWSTR,                         #lpCommandLine
-    POINTER(SECURITY_ATTRIBUTES),   #lpProcessAttributes
-    POINTER(SECURITY_ATTRIBUTES),   #lpThreadAttributes
-    BOOL,                           #bInheritHandles
-    DWORD,                          #dwCreationFlags
-    LPVOID,                         #lpEnvironment
-    LPCWSTR,                        #lpCurrentDirectory
-    POINTER(STARTUPINFOW),          #lpStartupInfo
-    POINTER(PROCESS_INFORMATION)    #lpProcessInformation
-]
-CreateProcessAsUserW.restype        = BOOL
-
 GetCurrentProcess                   = kernel32.GetCurrentProcess
 GetCurrentProcess.argtypes          = []
 GetCurrentProcess.restype           = HANDLE
 
+AdjustTokenGroups                   = advapi32.AdjustTokenGroups
+AdjustTokenGroups.argtypes          = [
+    HANDLE,                         # TokenHandle,
+    BOOL,                           # ResetToDefault,
+    POINTER(TOKEN_GROUPS),          # NewState,
+    DWORD,                          # BufferLength,
+    POINTER(TOKEN_GROUPS),          # PreviousState,
+    POINTER(DWORD),                 # ReturnLength
+]
+AdjustTokenGroups.restype           = BOOL
+
+CreateProcessWithTokenW             = advapi32.CreateProcessWithTokenW
+CreateProcessWithTokenW.argtypes    = [
+    HANDLE,                         # hToken
+    DWORD,                          # dwLogonFlags
+    LPCWSTR,                        # lpApplicationName
+    LPWSTR,                         # lpCommandLine
+    DWORD,                          # dwCreationFlags
+    LPVOID,                         # lpEnvironment
+    LPCWSTR,                        # lpCurrentDirectory
+    POINTER(STARTUPINFOW),          # lpStartupInfo
+    POINTER(PROCESS_INFORMATION)    # lpProcessInformation
+]
+CreateProcessWithTokenW.restype     = BOOL
+
+CreateProcessAsUserW                = advapi32.CreateProcessAsUserW
+CreateProcessAsUserW.argtypes       = [
+    HANDLE,                         # hToken
+    LPCWSTR,                        # lpApplicationName
+    LPWSTR,                         # lpCommandLine
+    POINTER(SECURITY_ATTRIBUTES),   # lpProcessAttributes
+    POINTER(SECURITY_ATTRIBUTES),   # lpThreadAttributes
+    BOOL,                           # bInheritHandles
+    DWORD,                          # dwCreationFlags
+    LPVOID,                         # lpEnvironment
+    LPCWSTR,                        # lpCurrentDirectory
+    POINTER(STARTUPINFOW),          # lpStartupInfo
+    POINTER(PROCESS_INFORMATION)    # lpProcessInformation
+]
+CreateProcessAsUserW.restype        = BOOL
+
 CreateProcessW                      = kernel32.CreateProcessW
 CreateProcessW.argtypes             = [
-    LPCWSTR,                        #lpApplicationName
-    LPWSTR,                         #lpCommandLine
-    POINTER(SECURITY_ATTRIBUTES),   #lpProcessAttributes
-    POINTER(SECURITY_ATTRIBUTES),   #lpThreadAttributes
-    BOOL,                           #bInheritHandles
-    DWORD,                          #dwCreationFlags
-    LPVOID,                         #lpEnvironment
-    LPCWSTR,                        #lpCurrentDirectory
-    POINTER(STARTUPINFOW),          #lpStartupInfo
-    POINTER(PROCESS_INFORMATION)    #lpProcessInformation
+    LPCWSTR,                        # lpApplicationName
+    LPWSTR,                         # lpCommandLine
+    POINTER(SECURITY_ATTRIBUTES),   # lpProcessAttributes
+    POINTER(SECURITY_ATTRIBUTES),   # lpThreadAttributes
+    BOOL,                           # bInheritHandles
+    DWORD,                          # dwCreationFlags
+    LPVOID,                         # lpEnvironment
+    LPCWSTR,                        # lpCurrentDirectory
+    POINTER(STARTUPINFOW),          # lpStartupInfo
+    POINTER(PROCESS_INFORMATION)    # lpProcessInformation
 ]
 CreateProcessW.restype              = BOOL
 
@@ -177,7 +202,7 @@ NtQueryInformationProcess           = ntdll.NtQueryInformationProcess
 NtQueryInformationProcess.argtypes  = [HANDLE, INT, LPVOID, ULONG, PULONG]
 NtQueryInformationProcess.restype   = NTSTATUS
 
-class _Handle(metaclass=ABCMeta):
+class Handle_(metaclass=ABCMeta):
     """
     Abstract base Handle class.
     Please override these functions if needed.
@@ -211,7 +236,7 @@ class _Handle(metaclass=ABCMeta):
     @abstractmethod
     def _is_invalid_handle(self) -> bool: ...
 
-class ProcessHandle(_Handle):
+class ProcessHandle(Handle_):
     _func       = OpenProcess
     _exitfunc   = CloseHandle
 
@@ -221,7 +246,7 @@ class ProcessHandle(_Handle):
     def _is_invalid_handle(self) -> bool:
         return self._handle is None
 
-class ThreadHandle(_Handle):
+class ThreadHandle(Handle_):
     _func       = OpenThread
     _exitfunc   = CloseHandle
 
@@ -231,7 +256,7 @@ class ThreadHandle(_Handle):
     def _is_invalid_handle(self) -> bool:
         return self._handle is None
 
-class CreateSnapshot(_Handle):
+class CreateSnapshot(Handle_):
     _func       = CreateToolhelp32Snapshot
     _exitfunc   = CloseHandle
 
@@ -242,7 +267,7 @@ class CreateSnapshot(_Handle):
         from module.device.platform.winapi.const_windows import INVALID_HANDLE_VALUE
         return self._handle == INVALID_HANDLE_VALUE
 
-class Handle(int, _Handle):
+class Handle(int, Handle_):
     _func       = int
     closed      = False
 
@@ -312,7 +337,7 @@ def report(
     if raiseexcept:
         raise exception(message)
 
-def fstr(formatstr: str) -> t.Union[int, str]:
+def fstr(formatstr: str) -> Union[int, str]:
     try:
         return int(formatstr, 16)
     except ValueError:
@@ -328,11 +353,11 @@ def create_snapshot(arg) -> CreateSnapshot:
     return CreateSnapshot(arg)
 
 def get_func_path(func) -> str:
-    module = func.__module__
+    module: str = func.__module__
     if hasattr(func, '__qualname__'):
-        qualname = func.__qualname__
+        qualname: str = func.__qualname__
     else:
-        qualname = func.__name__
+        qualname: str = func.__name__
     return f"{module.replace('.', '::')}::{qualname.replace('.', '::')}"
 
 def Timer(timeout=1):

@@ -1,4 +1,4 @@
-import typing as t
+from typing import Optional, Callable, List
 
 from module.base.decorator import run_once
 from module.base.timer import Timer
@@ -19,7 +19,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
     # Otherwise, it'll crash the system in some cases.
     process                 = None
     # Window handles of the target process.
-    hwnds: list             = []
+    hwnds: List[int]        = []
     # Pair, contains the hwnd of the focused window and a WINDOWPLACEMENT object.
     focusedwindow: tuple    = ()
 
@@ -58,7 +58,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         return api_windows.getfocusedwindow()
 
     @staticmethod
-    def setforegroundwindow(focusedwindow: tuple) -> bool:
+    def setforegroundwindow(focusedwindow) -> bool:
         return api_windows.setforegroundwindow(focusedwindow)
 
     @staticmethod
@@ -66,7 +66,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         return api_windows.get_hwnds(pid)
 
     @staticmethod
-    def get_process(instance: t.Optional[EmulatorInstance]) -> api_windows.PROCESS_INFORMATION:
+    def get_process(instance: Optional[EmulatorInstance]) -> api_windows.PROCESS_INFORMATION:
         return api_windows.get_process(instance)
 
     @staticmethod
@@ -185,7 +185,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         else:
             raise EmulatorUnknown(f'Cannot stop an unknown emulator instance: {instance}')
 
-    def _emulator_function_wrapper(self, func: t.Callable):
+    def _emulator_function_wrapper(self, func: Callable):
         """
         Args:
             func (callable): _emulator_start or _emulator_stop
