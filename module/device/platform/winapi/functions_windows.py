@@ -1,5 +1,4 @@
 from abc import ABCMeta, abstractmethod
-from typing import Union
 import time
 from functools import wraps
 
@@ -46,57 +45,57 @@ GetCurrentProcess.restype           = HANDLE
 
 AdjustTokenGroups                   = advapi32.AdjustTokenGroups
 AdjustTokenGroups.argtypes          = [
-    HANDLE,                         # TokenHandle,
-    BOOL,                           # ResetToDefault,
-    POINTER(TOKEN_GROUPS),          # NewState,
-    DWORD,                          # BufferLength,
-    POINTER(TOKEN_GROUPS),          # PreviousState,
-    POINTER(DWORD),                 # ReturnLength
+    HANDLE,
+    BOOL,
+    POINTER(TOKEN_GROUPS),
+    DWORD,
+    POINTER(TOKEN_GROUPS),
+    POINTER(DWORD),
 ]
 AdjustTokenGroups.restype           = BOOL
 
 CreateProcessWithTokenW             = advapi32.CreateProcessWithTokenW
 CreateProcessWithTokenW.argtypes    = [
-    HANDLE,                         # hToken
-    DWORD,                          # dwLogonFlags
-    LPCWSTR,                        # lpApplicationName
-    LPWSTR,                         # lpCommandLine
-    DWORD,                          # dwCreationFlags
-    LPVOID,                         # lpEnvironment
-    LPCWSTR,                        # lpCurrentDirectory
-    POINTER(STARTUPINFOW),          # lpStartupInfo
-    POINTER(PROCESS_INFORMATION)    # lpProcessInformation
+    HANDLE,
+    DWORD,
+    LPCWSTR,
+    LPWSTR,
+    DWORD,
+    LPVOID,
+    LPCWSTR,
+    POINTER(STARTUPINFOW),
+    POINTER(PROCESS_INFORMATION)
 ]
 CreateProcessWithTokenW.restype     = BOOL
 
 CreateProcessAsUserW                = advapi32.CreateProcessAsUserW
 CreateProcessAsUserW.argtypes       = [
-    HANDLE,                         # hToken
-    LPCWSTR,                        # lpApplicationName
-    LPWSTR,                         # lpCommandLine
-    POINTER(SECURITY_ATTRIBUTES),   # lpProcessAttributes
-    POINTER(SECURITY_ATTRIBUTES),   # lpThreadAttributes
-    BOOL,                           # bInheritHandles
-    DWORD,                          # dwCreationFlags
-    LPVOID,                         # lpEnvironment
-    LPCWSTR,                        # lpCurrentDirectory
-    POINTER(STARTUPINFOW),          # lpStartupInfo
-    POINTER(PROCESS_INFORMATION)    # lpProcessInformation
+    HANDLE,
+    LPCWSTR,
+    LPWSTR,
+    POINTER(SECURITY_ATTRIBUTES),
+    POINTER(SECURITY_ATTRIBUTES),
+    BOOL,
+    DWORD,
+    LPVOID,
+    LPCWSTR,
+    POINTER(STARTUPINFOW),
+    POINTER(PROCESS_INFORMATION)
 ]
 CreateProcessAsUserW.restype        = BOOL
 
 CreateProcessW                      = kernel32.CreateProcessW
 CreateProcessW.argtypes             = [
-    LPCWSTR,                        # lpApplicationName
-    LPWSTR,                         # lpCommandLine
-    POINTER(SECURITY_ATTRIBUTES),   # lpProcessAttributes
-    POINTER(SECURITY_ATTRIBUTES),   # lpThreadAttributes
-    BOOL,                           # bInheritHandles
-    DWORD,                          # dwCreationFlags
-    LPVOID,                         # lpEnvironment
-    LPCWSTR,                        # lpCurrentDirectory
-    POINTER(STARTUPINFOW),          # lpStartupInfo
-    POINTER(PROCESS_INFORMATION)    # lpProcessInformation
+    LPCWSTR,
+    LPWSTR,
+    POINTER(SECURITY_ATTRIBUTES),
+    POINTER(SECURITY_ATTRIBUTES),
+    BOOL,
+    DWORD,
+    LPVOID,
+    LPCWSTR,
+    POINTER(STARTUPINFOW),
+    POINTER(PROCESS_INFORMATION)
 ]
 CreateProcessW.restype              = BOOL
 
@@ -203,125 +202,62 @@ NtQueryInformationProcess.argtypes  = [HANDLE, INT, LPVOID, ULONG, PULONG]
 NtQueryInformationProcess.restype   = NTSTATUS
 
 class Handle_(metaclass=ABCMeta):
-    """
-    Abstract base Handle class.
-    Please override these functions if needed.
-    """
     _handle     = None
     _func       = None
     _exitfunc   = None
 
-    def __init__(self, *args, **kwargs) -> None:
-        self._handle = self._func(*self.__get_init_args__(*args, **kwargs))
+    def __init__(self, *args, **kwargs):
+        self._handle = HANDLE(self._func(*self.__get_init_args__(*args, **kwargs)))
         assert self, \
             report(
                 f"{self._func.__name__} failed.",
                 uselog=kwargs.get('uselog', True),
-                raiseexcept=kwargs.get("raiseexcept", True)
+                raise_=kwargs.get("raise_", True)
             )
 
-    def __enter__(self) -> int:
+    def __enter__(self):
         return self._handle
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(self, exc_type, exc_val, exc_tb):
         if self:
             self._exitfunc(self._handle)
             self._handle = None
 
-    def __bool__(self) -> bool:
+    def __bool__(self):
         return not self._is_invalid_handle()
 
     @abstractmethod
-    def __get_init_args__(self, *args, **kwargs) -> tuple: ...
-    @abstractmethod
-    def _is_invalid_handle(self) -> bool: ...
+    def __get_init_args__(self, *args, **kwargs): ...
+
+    def _is_invalid_handle(self):
+        return self._handle is None
 
 class ProcessHandle(Handle_):
     _func       = OpenProcess
     _exitfunc   = CloseHandle
 
-    def __get_init_args__(self, access, pid, uselog, raiseexcept) -> tuple:
+    def __get_init_args__(self, access, pid, uselog, raise_):
         return access, False, pid
-
-    def _is_invalid_handle(self) -> bool:
-        return self._handle is None
 
 class ThreadHandle(Handle_):
     _func       = OpenThread
     _exitfunc   = CloseHandle
 
-    def __get_init_args__(self, access, pid, uselog, raiseexcept) -> tuple:
+    def __get_init_args__(self, access, pid, uselog, raise_):
         return access, False, pid
-
-    def _is_invalid_handle(self) -> bool:
-        return self._handle is None
 
 class CreateSnapshot(Handle_):
     _func       = CreateToolhelp32Snapshot
     _exitfunc   = CloseHandle
 
-    def __get_init_args__(self, access) -> tuple:
+    def __get_init_args__(self, access):
         return access, DWORD(0)
 
-    def _is_invalid_handle(self) -> bool:
+    def _is_invalid_handle(self):
         from module.device.platform.winapi.const_windows import INVALID_HANDLE_VALUE
         return self._handle == INVALID_HANDLE_VALUE
 
-class Handle(int, Handle_):
-    _func       = int
-    closed      = False
-
-    def Close(self, fclose=CloseHandle):
-        if not self.closed:
-            self.closed = True
-            fclose(self)
-
-    def Detach(self):
-        if not self.closed:
-            self.closed = True
-            return int(self)
-        raise ValueError("already closed")
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}({int(self)})"
-
-    def __get_init_args__(self, *args, **kwargs) -> tuple:
-        return ()
-
-    def _is_invalid_handle(self) -> bool:
-        return False  # assert the handle is valid
-
-    __del__ = Close
-    __str__ = __repr__
-
-def report(
-        msg: str            = '',
-        *args: tuple,
-        reportstatus: bool  = True,
-        statuscode: int     = -1,
-        uselog: bool        = True,
-        level: int          = 40,
-        raiseexcept: bool   = True,
-        exception: type     = OSError,
-        **kwargs: dict,
-) -> None:
-    """
-    Report any exception.
-    
-    Args:
-        msg (str):
-        args:
-        reportstatus (bool):
-        statuscode (int):
-        uselog (bool):
-        level (int): Logging level
-        raiseexcept (bool): Flag indicating whether to raise
-        exception (Type[Exception]): Exception class to raise
-        kwargs:
-
-    Raises:
-        Optional[OSError]:
-    """
+def report(msg='',*args,reportstatus=True,statuscode=-1,uselog=True,level=40,raise_=True,exception=OSError,**kwargs):
     message: list = [msg]
     if reportstatus:
         if statuscode == -1:
@@ -334,31 +270,36 @@ def report(
     message: str = '. '.join(message)
     if uselog:
         logger.log(level, message)
-    if raiseexcept:
+    if raise_:
         raise exception(message)
 
-def fstr(formatstr: str) -> Union[int, str]:
+def fstr(formatstr):
     try:
         return int(formatstr, 16)
     except ValueError:
         return formatstr.replace(r"\\", "/").replace("\\", "/").replace('"', '"')
 
-def open_process(access, pid, *, uselog=False, raiseexcept=True) -> ProcessHandle:
-    return ProcessHandle(access, pid, uselog=uselog, raiseexcept=raiseexcept)
+def open_process(access, pid, uselog=False, raise_=True):
+    return ProcessHandle(access, pid, uselog=uselog, raise_=raise_)
 
-def open_thread(access, tid, *, uselog=False, raiseexcept=True) -> ThreadHandle:
-    return ThreadHandle(access, tid, uselog=uselog, raiseexcept=raiseexcept)
+def open_thread(access, tid, uselog=False, raise_=True):
+    return ThreadHandle(access, tid, uselog=uselog, raise_=raise_)
 
-def create_snapshot(arg) -> CreateSnapshot:
-    return CreateSnapshot(arg)
+def create_snapshot(access):
+    return CreateSnapshot(access)
 
-def get_func_path(func) -> str:
-    module: str = func.__module__
-    if hasattr(func, '__qualname__'):
-        qualname: str = func.__qualname__
+def get_func_path(func):
+    funcpath: list = []
+    if hasattr(func, '__module__'):
+        funcpath.append(getattr(func, '__module__'))
     else:
-        qualname: str = func.__name__
-    return f"{module.replace('.', '::')}::{qualname.replace('.', '::')}"
+        pass
+    if hasattr(func, '__qualname__'):
+        funcpath.append(getattr(func, '__qualname__'))
+    else:
+        funcpath.append(str(getattr(func, '__name__')).replace('.', '::'))
+    funcpath: str = '.'.join(funcpath)
+    return funcpath
 
 def Timer(timeout=1):
     import logging

@@ -46,6 +46,9 @@ class QueryEvt(Handle_):
     _func       = EvtQuery
     _exitfunc   = EvtClose
 
+    def __enter__(self) -> EVT_HANDLE:
+        return EVT_HANDLE(self._handle)
+
     @staticmethod
     def __get_init_args__():
         query = "Event/System[EventID=4688]"
@@ -146,7 +149,7 @@ def _enum_events(hevent):
     returned = DWORD(0)
     while EvtNext(hevent, 1, byref(event), INFINITE, 0, byref(returned)):
         if event == INVALID_HANDLE_VALUE:
-            report(f"Invalid handle: 0x{event}", raiseexcept=False)
+            report(f"Invalid handle: 0x{event}", raise_=False)
             continue
 
         buffer_size = DWORD(0)
@@ -170,7 +173,7 @@ def _enum_events(hevent):
         buffer_size = buffer_used.value
         rendered_content = create_unicode_buffer(buffer_size)
         if not rendered_content:
-            report("malloc failed.", raiseexcept=False)
+            report("malloc failed.", raise_=False)
             continue
 
         if not EvtRender(
@@ -182,7 +185,7 @@ def _enum_events(hevent):
             byref(buffer_used),
             byref(property_count)
         ):
-            report(f"EvtRender failed with {GetLastError()}", raiseexcept=False)
+            report(f"EvtRender failed with {GetLastError()}", raise_=False)
             continue
 
         if GetLastError() == ERROR_SUCCESS:

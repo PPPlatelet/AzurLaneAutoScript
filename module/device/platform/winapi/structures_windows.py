@@ -240,6 +240,14 @@ class FILETIME(Structure, _FILETIME):
     def to_int(self):
         return (self.dwHighDateTime << 32) + self.dwLowDateTime
 
+class TIME(Structure):
+    _fields_ = [
+        ("CreationTime",    FILETIME),
+        ("ExitTime",        FILETIME),
+        ("KernelTime",      FILETIME),
+        ("UserTime",        FILETIME)
+    ]
+
 class SID_AND_ATTRIBUTES(Structure):
     _fields_ = [
         ("Sid",         c_void_p),

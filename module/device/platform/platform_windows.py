@@ -1,4 +1,4 @@
-from typing import Optional, Callable, List
+from typing import Callable, Optional
 
 from module.base.decorator import run_once
 from module.base.timer import Timer
@@ -19,7 +19,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
     # Otherwise, it'll crash the system in some cases.
     process                 = None
     # Window handles of the target process.
-    hwnds: List[int]        = []
+    hwnds: list             = []
     # Pair, contains the hwnd of the focused window and a WINDOWPLACEMENT object.
     focusedwindow: tuple    = ()
 
@@ -34,7 +34,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
         if self.process:
             if not all(self.process[:2]):
-                api_windows.closehandle(*self.process[:2])
+                api_windows.close_handle(*self.process[:2])
                 self.process = None
 
         if self.hwnds:
@@ -54,12 +54,12 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         return api_windows.kill_process_by_regex(regex)
 
     @staticmethod
-    def getfocusedwindow() -> tuple:
-        return api_windows.getfocusedwindow()
+    def get_focused_window() -> tuple:
+        return api_windows.get_focused_window()
 
     @staticmethod
-    def setforegroundwindow(focusedwindow) -> bool:
-        return api_windows.setforegroundwindow(focusedwindow)
+    def set_focus_to_window(focusedwindow) -> bool:
+        return api_windows.set_focus_to_window(focusedwindow)
 
     @staticmethod
     def get_hwnds(pid: int) -> list:
@@ -343,7 +343,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 return True
             else:
                 if not all(self.process[:2]):
-                    api_windows.closehandle(*self.process[:2])
+                    api_windows.close_handle(*self.process[:2])
                     self.process = None
                 raise ProcessLookupError
         except api_windows.IterationFinished:

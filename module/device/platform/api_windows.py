@@ -1,22 +1,42 @@
 import threading
 import re
-from typing import Callable, Generator, Optional, Tuple, List
+from typing import Generator
 
 from ctypes import byref, create_unicode_buffer, wstring_at, addressof
 from ctypes.wintypes import HANDLE, HWND, LPARAM, DWORD, ULONG, LPCWSTR, LPWSTR, BOOL, LPVOID, UINT, INT
 
-from module.device.platform.emulator_windows import Emulator, EmulatorInstance
+from module.device.platform.emulator_windows import Emulator
 from module.device.platform.winapi import *
 from module.logger import logger
 
 
-def closehandle(*args, fclose=CloseHandle) -> bool:
+def close_handle(*args, fclose=CloseHandle):
+    count = 0
     for handle in args:
-        fclose(handle)
+        if isinstance(handle, int):
+            handle = HANDLE(handle)
+        if isinstance(handle, c_void_p):
+            fclose(handle)
+            count += 1
+            logger.info(f"Closed handle: {handle}")
+        else:
+            report(
+                f"Expected a int or c_void_p, but got {type(handle).__name__}",
+                reportstatus=False,
+                level=30,
+                raise_=False,
+            )
+    if not count:
+        report(
+            f"All handles are unavailable, please check the running environment",
+            reportstatus=False,
+            raise_=False
+        )
+        return False
     return True
 
 
-def __yield_entries(entry32, snapshot, func: Callable) -> Generator:
+def __yield_entries(entry32, snapshot, func):
     while 1:
         yield entry32
         if func(snapshot, byref(entry32)):
@@ -27,34 +47,34 @@ def __yield_entries(entry32, snapshot, func: Callable) -> Generator:
         report("Finished querying.", statuscode=errorcode, uselog=False, exception=IterationFinished)
 
 
-def _enum_processes() -> Generator:
+def _enum_processes() -> Generator[PROCESSENTRY32W, None, None]:
     lppe32          = PROCESSENTRY32W()
     lppe32.dwSize   = sizeof(PROCESSENTRY32W)
     with create_snapshot(TH32CS_SNAPPROCESS) as snapshot:
-        assert Process32First(HANDLE(snapshot), byref(lppe32)), report("Process32First failed")
+        assert Process32First(snapshot, byref(lppe32)), report("Process32First failed")
         yield from __yield_entries(lppe32, snapshot, Process32Next)
 
 
-def _enum_threads() -> Generator:
+def _enum_threads() -> Generator[THREADENTRY32, None, None]:
     lpte32          = THREADENTRY32()
     lpte32.dwSize   = sizeof(THREADENTRY32)
     with create_snapshot(TH32CS_SNAPTHREAD) as snapshot:
-        assert Thread32First(HANDLE(snapshot), byref(lpte32)), report("Thread32First failed")
+        assert Thread32First(snapshot, byref(lpte32)), report("Thread32First failed")
         yield from __yield_entries(lpte32, snapshot, Thread32Next)
 
 
-def getfocusedwindow() -> Tuple[int, Optional[WINDOWPLACEMENT]]:
-    hwnd = GetForegroundWindow()
+def get_focused_window():
+    hwnd = HWND(GetForegroundWindow())
     wp = WINDOWPLACEMENT()
     wp.length = sizeof(WINDOWPLACEMENT)
     if GetWindowPlacement(hwnd, byref(wp)):
         return hwnd, wp
     else:
-        report("Failed to get windowplacement", level=30, raiseexcept=False)
+        report("Failed to get windowplacement", level=30, raise_=False)
         return hwnd, None
 
 
-def setforegroundwindow(focusedwindow: Tuple[int, Optional[WINDOWPLACEMENT]]) -> bool:
+def set_focus_to_window(focusedwindow):
     SetForegroundWindow(HANDLE(focusedwindow[0]))
     if focusedwindow[1] is None:
         ShowWindow(HANDLE(focusedwindow[0]), SW_SHOWNORMAL)
@@ -64,7 +84,7 @@ def setforegroundwindow(focusedwindow: Tuple[int, Optional[WINDOWPLACEMENT]]) ->
     return True
 
 
-def refresh_window(focusedwindow, max_attempts=10, interval=0.5) -> None:
+def refresh_window(focusedwindow, max_attempts=10, interval=0.5):
     from time import sleep
     from itertools import combinations
 
@@ -72,17 +92,17 @@ def refresh_window(focusedwindow, max_attempts=10, interval=0.5) -> None:
     prevwindow = ()
 
     def unique(*args):
-        return all(x[0] != y[0] for x, y in combinations(args, 2))
+        return all(x[0].value != y[0].value for x, y in combinations(args, 2))
 
     while attempts < max_attempts:
-        currentwindow = getfocusedwindow()
+        currentwindow = get_focused_window()
         if prevwindow:
             if unique(currentwindow, prevwindow, focusedwindow):
                 break
 
         if unique(focusedwindow, currentwindow):
             logger.info(f"Current window is {currentwindow[0]}, flash back to {focusedwindow[0]}")
-            setforegroundwindow(focusedwindow)
+            set_focus_to_window(focusedwindow)
             attempts += 1
             sleep(interval)
 
@@ -92,11 +112,11 @@ def refresh_window(focusedwindow, max_attempts=10, interval=0.5) -> None:
         prevwindow = currentwindow
 
 
-def execute(command: str, silentstart: bool, start: bool) -> Tuple[Optional[PROCESS_INFORMATION], Tuple[int, Optional[WINDOWPLACEMENT]]]:
+def execute(command, silentstart, start):
     # TODO:Create Process with non-administrator privileges
     from shlex import split
     from os.path import dirname
-    focusedwindow               = getfocusedwindow()
+    focusedwindow               = get_focused_window()
     if start:
         threading.Thread(target=refresh_window, args=(focusedwindow,)).start()
 
@@ -123,18 +143,18 @@ def execute(command: str, silentstart: bool, start: bool) -> Tuple[Optional[PROC
         None
     )
 
-    dwLogonFlags = 0
-    lpApplicationName           = split(command)[0]
-    lpCommandLine               = command
+    dwLogonFlags = DWORD(0)
+    lpApplicationName           = LPCWSTR(split(command)[0])
+    lpCommandLine               = LPWSTR(command)
     # lpProcessAttributes         = None
     # lpThreadAttributes          = None
     # bInheritHandles             = False
-    dwCreationFlags             = (
+    dwCreationFlags             = DWORD(
         DETACHED_PROCESS |
         CREATE_UNICODE_ENVIRONMENT
     )
-    lpEnvironment               = None
-    lpCurrentDirectory          = dirname(lpApplicationName)
+    lpEnvironment               = LPVOID(None)
+    lpCurrentDirectory          = LPCWSTR(dirname(lpApplicationName))
     lpStartupInfo               = STARTUPINFOW()
     lpStartupInfo.cb            = sizeof(STARTUPINFOW)
     lpStartupInfo.dwFlags       = STARTF_USESHOWWINDOW
@@ -146,12 +166,12 @@ def execute(command: str, silentstart: bool, start: bool) -> Tuple[Optional[PROC
 
     assert CreateProcessWithTokenW(
         hToken,
-        DWORD(dwLogonFlags),
-        LPCWSTR(lpApplicationName),
-        LPWSTR(lpCommandLine),
-        DWORD(dwCreationFlags),
-        LPVOID(lpEnvironment),
-        LPCWSTR(lpCurrentDirectory),
+        dwLogonFlags,
+        lpApplicationName,
+        lpCommandLine,
+        dwCreationFlags,
+        lpEnvironment,
+        lpCurrentDirectory,
         byref(lpStartupInfo),
         byref(lpProcessInformation)
     ),  report("Failed to start emulator", exception=EmulatorLaunchFailedError)
@@ -159,17 +179,17 @@ def execute(command: str, silentstart: bool, start: bool) -> Tuple[Optional[PROC
     if start:
         return lpProcessInformation, focusedwindow
     else:
-        closehandle(*lpProcessInformation[:2])
+        close_handle(*lpProcessInformation[:2])
         return None, focusedwindow
 
 
-def terminate_process(pid: int) -> bool:
+def terminate_process(pid):
     with open_process(PROCESS_TERMINATE, pid) as hProcess:
         assert TerminateProcess(HANDLE(hProcess), UINT(0)), report("Failed to kill process")
     return True
 
 
-def get_hwnds(pid: int) -> List[int]:
+def get_hwnds(pid):
     hwnds = []
 
     @EnumWindowsProc
@@ -177,7 +197,7 @@ def get_hwnds(pid: int) -> List[int]:
         processid = DWORD()
         GetWindowThreadProcessId(hwnd, byref(processid))
         if processid.value == pid:
-            hwnds.append(hwnd)
+            hwnds.append(HWND(hwnd))
         return True
     
     assert EnumWindows(callback, LPARAM(0)), report("Failed to get hwnds")
@@ -190,30 +210,30 @@ def get_hwnds(pid: int) -> List[int]:
     return hwnds
 
 
-def get_cmdline(pid: int) -> str:
+def get_cmdline(pid):
     try:
         with open_process(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, pid) as hProcess:
             # Query process infomation
             pbi = PROCESS_BASIC_INFORMATION()
             returnlength = ULONG(sizeof(pbi))
-            status = NtQueryInformationProcess(HANDLE(hProcess), INT(0), byref(pbi), ULONG(sizeof(pbi)), byref(returnlength))
+            status = NtQueryInformationProcess(hProcess, INT(0), byref(pbi), ULONG(sizeof(pbi)), byref(returnlength))
             assert status == STATUS_SUCCESS, \
-                report(f"NtQueryInformationProcess failed. Status: 0x{status:x}.", level=30)
+                report(f"NtQueryInformationProcess failed. Status: 0x{status:x}", level=10)
 
             # Read PEB
             peb = PEB()
-            assert ReadProcessMemory(HANDLE(hProcess), pbi.PebBaseAddress, byref(peb), SIZE_T(sizeof(peb)), None), \
-                report("Failed to read PEB", level=30)
+            assert ReadProcessMemory(hProcess, pbi.PebBaseAddress, byref(peb), SIZE_T(sizeof(peb)), None), \
+                report("Failed to read PEB", level=10)
 
             # Read process parameters
             upp = RTL_USER_PROCESS_PARAMETERS()
-            assert ReadProcessMemory(HANDLE(hProcess), peb.ProcessParameters, byref(upp), SIZE_T(sizeof(upp)), None), \
-                report("Failed to read process parameters", level=30)
+            assert ReadProcessMemory(hProcess, peb.ProcessParameters, byref(upp), SIZE_T(sizeof(upp)), None), \
+                report("Failed to read process parameters", level=10)
 
             # Read command line
             commandLine = create_unicode_buffer(upp.CommandLine.Length // 2)
-            assert ReadProcessMemory(HANDLE(hProcess), upp.CommandLine.Buffer, commandLine, upp.CommandLine.Length, None), \
-                report("Failed to read command line", level=30)
+            assert ReadProcessMemory(hProcess, upp.CommandLine.Buffer, commandLine, upp.CommandLine.Length, None), \
+                report("Failed to read command line", level=10)
 
             cmdline = wstring_at(addressof(commandLine), len(commandLine))
     except OSError:
@@ -221,7 +241,7 @@ def get_cmdline(pid: int) -> str:
     return fstr(cmdline)
 
 
-def kill_process_by_regex(regex: str) -> int:
+def kill_process_by_regex(regex):
     count = 0
 
     try:
@@ -237,30 +257,27 @@ def kill_process_by_regex(regex: str) -> int:
         return count
 
 
-def __get_creation_time(fopen: Callable, fgettime: Callable, access: int, identification: int) -> Optional[int]:
-    with fopen(access, identification, uselog=False, raiseexcept=False) as handle:
-        creationtime    = FILETIME()
-        exittime        = FILETIME()
-        kerneltime      = FILETIME()
-        usertime        = FILETIME()
+def __get_time(fopen, fgettime, access, identification, select=0):
+    with fopen(access, identification, False, False) as handle:
+        Time = TIME()
         if not fgettime(
             handle,
-            byref(creationtime),
-            byref(exittime),
-            byref(kerneltime),
-            byref(usertime)
+            byref(Time.CreationTime),
+            byref(Time.ExitTime),
+            byref(Time.KernelTime),
+            byref(Time.UserTime)
         ):
             return None
-        return creationtime.to_int()
+        return Time[select].to_int()
 
-def _get_process_creation_time(pid: int) -> Optional[int]:
-    return __get_creation_time(open_process, GetProcessTimes, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, pid)
+def _get_process_creation_time(pid):
+    return __get_time(open_process, GetProcessTimes, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, pid, 0)
 
-def _get_thread_creation_time(tid: int) -> Optional[int]:
-    return __get_creation_time(open_thread, GetThreadTimes, THREAD_QUERY_INFORMATION, tid)
+def _get_thread_creation_time(tid):
+    return __get_time(open_thread, GetThreadTimes, THREAD_QUERY_INFORMATION, tid, 0)
 
 
-def get_thread(pid: int) -> int:
+def get_thread(pid):
     mainthreadid    = 0
     minstarttime    = MAXULONGLONG
     try:
@@ -279,7 +296,7 @@ def get_thread(pid: int) -> int:
         return mainthreadid
 
 
-def _get_process(pid: int) -> PROCESS_INFORMATION:
+def _get_process(pid):
     tid = get_thread(pid)
     pi = PROCESS_INFORMATION(None, None, pid, tid)
     try:
@@ -293,13 +310,13 @@ def _get_process(pid: int) -> PROCESS_INFORMATION:
             report("OpenThread failed", level=30)
 
         pi.hProcess, pi.hThread = hProcess, hThread
-    except Exception as e:
+    except OSError as e:
         logger.warning(f"Failed to get process and thread handles: {e}")
     finally:
         logger.info(f"Emulator Process: {pi}")
         return pi
 
-def get_process(instance: EmulatorInstance) -> PROCESS_INFORMATION:
+def get_process(instance):
     for lppe32 in _enum_processes():
         pid = lppe32.th32ProcessID
         cmdline = get_cmdline(pid)
@@ -319,37 +336,46 @@ def get_process(instance: EmulatorInstance) -> PROCESS_INFORMATION:
                 return _get_process(pid)
 
 
-def switch_window(hwnds: List[int], arg: int = SW_SHOWNORMAL) -> bool:
+def switch_window(hwnds, arg=SW_SHOWNORMAL):
+    count = 0
     for hwnd in hwnds:
-        if not GetWindow(HANDLE(hwnd), GW_CHILD):
+        if not GetWindow(hwnd, GW_CHILD):
             continue
-        ShowWindow(HANDLE(hwnd), INT(arg))
+        count += 1
+        ShowWindow(hwnd, INT(arg))
+    if not count:
+        report(
+            "All hwnds are unavailable, please check the running environment",
+            reportstatus=False,
+            raise_=False
+        )
+        return False
     return True
 
-def get_parent_pid(pid: int) -> int:
+def get_parent_pid(pid):
     try:
         with open_process(PROCESS_QUERY_INFORMATION, pid) as hProcess:
             # Query process infomation
             pbi = PROCESS_BASIC_INFORMATION()
             returnlength = ULONG(sizeof(pbi))
-            status = NtQueryInformationProcess(HANDLE(hProcess), INT(0), byref(pbi), returnlength, byref(returnlength))
+            status = NtQueryInformationProcess(hProcess, INT(0), byref(pbi), returnlength, byref(returnlength))
             assert status == STATUS_SUCCESS, \
-                report(f"NtQueryInformationProcess failed. Status: 0x{status:x}.", level=30)
+                report(f"NtQueryInformationProcess failed. Status: 0x{status:x}", level=30)
     except OSError:
         return -1
     return pbi.InheritedFromUniqueProcessId
 
-def get_exit_code(pid: int) -> int:
+def get_exit_code(pid):
     try:
         with open_process(PROCESS_QUERY_INFORMATION, pid) as hProcess:
             exit_code = ULONG()
-            assert GetExitCodeProcess(HANDLE(hProcess), byref(exit_code)), \
+            assert GetExitCodeProcess(hProcess, byref(exit_code)), \
                 report("Failed to get Exit code", level=30)
     except OSError:
         return -1
     return exit_code.value
 
-def is_running(ppid: int = 0, pid: int = 0) -> bool:
+def is_running(pid=0, ppid=0):
     if pid and get_exit_code(pid) != STILL_ACTIVE:
         return False
     if ppid and ppid != get_parent_pid(pid):
