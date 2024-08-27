@@ -2,8 +2,7 @@ import threading
 import re
 from typing import Generator
 
-from ctypes import byref, create_unicode_buffer, wstring_at, addressof
-from ctypes.wintypes import HANDLE, HWND, LPARAM, DWORD, ULONG, LPCWSTR, LPWSTR, BOOL, LPVOID, UINT, INT
+from ctypes import addressof, create_unicode_buffer, wstring_at
 
 from module.device.platform.emulator_windows import Emulator
 from module.device.platform.winapi import *
@@ -75,12 +74,12 @@ def get_focused_window():
 
 
 def set_focus_to_window(focusedwindow):
-    SetForegroundWindow(HANDLE(focusedwindow[0]))
+    SetForegroundWindow(focusedwindow[0])
     if focusedwindow[1] is None:
-        ShowWindow(HANDLE(focusedwindow[0]), SW_SHOWNORMAL)
+        ShowWindow(focusedwindow[0], SW_SHOWNORMAL)
     else:
-        ShowWindow(HANDLE(focusedwindow[0]), focusedwindow[1].showCmd)
-        SetWindowPlacement(HANDLE(focusedwindow[0]), focusedwindow[1])
+        ShowWindow(focusedwindow[0], focusedwindow[1].showCmd)
+        SetWindowPlacement(focusedwindow[0], focusedwindow[1])
     return True
 
 
@@ -89,10 +88,9 @@ def refresh_window(focusedwindow, max_attempts=10, interval=0.5):
     from itertools import combinations
 
     attempts = 0
-    prevwindow = ()
+    prevwindow = None
 
-    def unique(*args):
-        return all(x[0].value != y[0].value for x, y in combinations(args, 2))
+    unique = lambda *args: all(x[0].value != y[0].value for x, y in combinations(args, 2))
 
     while attempts < max_attempts:
         currentwindow = get_focused_window()
@@ -118,17 +116,17 @@ def execute(command, silentstart, start):
     from os.path import dirname
     focusedwindow               = get_focused_window()
     if start:
-        threading.Thread(target=refresh_window, args=(focusedwindow,)).start()
+        threading.Thread(target=refresh_window, name='Refresh_Thread', args=(focusedwindow,)).start()
 
     chandle = HANDLE()
-    OpenProcessToken(GetCurrentProcess(), DWORD(TOKEN_DUPLICATE), byref(chandle))
+    OpenProcessToken(GetCurrentProcess(), TOKEN_DUPLICATE, byref(chandle))
     hToken = HANDLE()
     DuplicateTokenEx(
         chandle,
-        DWORD(TOKEN_DUPLICATE | TOKEN_QUERY, TOKEN_ADJUST_SESSIONID),
+        TOKEN_DUPLICATE | TOKEN_QUERY, TOKEN_ADJUST_SESSIONID,
         None,
-        ULONG(SECURITY_DELEGATION),
-        ULONG(TOKEN_PRIMARY),
+        SECURITY_DELEGATION,
+        TOKEN_PRIMARY,
         byref(hToken)
     )
     token_groups = TOKEN_GROUPS()
@@ -136,25 +134,25 @@ def execute(command, silentstart, start):
     token_groups.Groups[0].Attributes = SE_GROUP_USE_FOR_DENY_ONLY
     AdjustTokenGroups(
         hToken,
-        BOOL(True),
+        True,
         byref(token_groups),
-        DWORD(0),
+        0,
         None,
         None
     )
 
     dwLogonFlags = DWORD(0)
-    lpApplicationName           = LPCWSTR(split(command)[0])
-    lpCommandLine               = LPWSTR(command)
+    lpApplicationName           = split(command)[0]
+    lpCommandLine               = command
     # lpProcessAttributes         = None
     # lpThreadAttributes          = None
     # bInheritHandles             = False
-    dwCreationFlags             = DWORD(
+    dwCreationFlags             = (
         DETACHED_PROCESS |
         CREATE_UNICODE_ENVIRONMENT
     )
-    lpEnvironment               = LPVOID(None)
-    lpCurrentDirectory          = LPCWSTR(dirname(lpApplicationName))
+    lpEnvironment               = None
+    lpCurrentDirectory          = dirname(lpApplicationName)
     lpStartupInfo               = STARTUPINFOW()
     lpStartupInfo.cb            = sizeof(STARTUPINFOW)
     lpStartupInfo.dwFlags       = STARTF_USESHOWWINDOW
@@ -185,7 +183,7 @@ def execute(command, silentstart, start):
 
 def terminate_process(pid):
     with open_process(PROCESS_TERMINATE, pid) as hProcess:
-        assert TerminateProcess(HANDLE(hProcess), UINT(0)), report("Failed to kill process")
+        assert TerminateProcess(hProcess, 0), report("Failed to kill process")
     return True
 
 
@@ -216,24 +214,24 @@ def get_cmdline(pid):
             # Query process infomation
             pbi = PROCESS_BASIC_INFORMATION()
             returnlength = ULONG(sizeof(pbi))
-            status = NtQueryInformationProcess(hProcess, INT(0), byref(pbi), ULONG(sizeof(pbi)), byref(returnlength))
+            status = NtQueryInformationProcess(hProcess, 0, byref(pbi), sizeof(pbi), byref(returnlength))
             assert status == STATUS_SUCCESS, \
-                report(f"NtQueryInformationProcess failed. Status: 0x{status:x}", level=10)
+                report(f"NtQueryInformationProcess failed. Status: 0x{status:08x}", uselog=False)
 
             # Read PEB
             peb = PEB()
-            assert ReadProcessMemory(hProcess, pbi.PebBaseAddress, byref(peb), SIZE_T(sizeof(peb)), None), \
-                report("Failed to read PEB", level=10)
+            assert ReadProcessMemory(hProcess, pbi.PebBaseAddress, byref(peb), sizeof(peb), None), \
+                report("Failed to read PEB", level=30)
 
             # Read process parameters
             upp = RTL_USER_PROCESS_PARAMETERS()
-            assert ReadProcessMemory(hProcess, peb.ProcessParameters, byref(upp), SIZE_T(sizeof(upp)), None), \
-                report("Failed to read process parameters", level=10)
+            assert ReadProcessMemory(hProcess, peb.ProcessParameters, byref(upp), sizeof(upp), None), \
+                report("Failed to read process parameters", level=30)
 
             # Read command line
             commandLine = create_unicode_buffer(upp.CommandLine.Length // 2)
             assert ReadProcessMemory(hProcess, upp.CommandLine.Buffer, commandLine, upp.CommandLine.Length, None), \
-                report("Failed to read command line", level=10)
+                report("Failed to read command line", level=30)
 
             cmdline = wstring_at(addressof(commandLine), len(commandLine))
     except OSError:
@@ -259,7 +257,7 @@ def kill_process_by_regex(regex):
 
 def __get_time(fopen, fgettime, access, identification, select=0):
     with fopen(access, identification, False, False) as handle:
-        Time = TIME()
+        Time = TIMEINFO()
         if not fgettime(
             handle,
             byref(Time.CreationTime),
@@ -342,7 +340,7 @@ def switch_window(hwnds, arg=SW_SHOWNORMAL):
         if not GetWindow(hwnd, GW_CHILD):
             continue
         count += 1
-        ShowWindow(hwnd, INT(arg))
+        ShowWindow(hwnd, arg)
     if not count:
         report(
             "All hwnds are unavailable, please check the running environment",
@@ -358,7 +356,7 @@ def get_parent_pid(pid):
             # Query process infomation
             pbi = PROCESS_BASIC_INFORMATION()
             returnlength = ULONG(sizeof(pbi))
-            status = NtQueryInformationProcess(hProcess, INT(0), byref(pbi), returnlength, byref(returnlength))
+            status = NtQueryInformationProcess(hProcess, 0, byref(pbi), returnlength, byref(returnlength))
             assert status == STATUS_SUCCESS, \
                 report(f"NtQueryInformationProcess failed. Status: 0x{status:x}", level=30)
     except OSError:

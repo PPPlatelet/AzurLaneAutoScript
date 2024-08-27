@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 import time
 from functools import wraps
+from typing import Any, Callable, Optional, Union
 
 from ctypes import POINTER, WINFUNCTYPE, WinDLL, c_size_t
 from ctypes.wintypes import \
@@ -202,62 +203,102 @@ NtQueryInformationProcess.argtypes  = [HANDLE, INT, LPVOID, ULONG, PULONG]
 NtQueryInformationProcess.restype   = NTSTATUS
 
 class Handle_(metaclass=ABCMeta):
-    _handle     = None
-    _func       = None
-    _exitfunc   = None
+    """
+    Abstract base Handle class.
+    Please override these functions if needed.
+    """
+    _handle:    Optional[HANDLE]
+    _func:      Callable[..., HANDLE]
+    _exitfunc:  Callable[[HANDLE], None]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         self._handle = HANDLE(self._func(*self.__get_init_args__(*args, **kwargs)))
-        assert self, \
-            report(
-                f"{self._func.__name__} failed.",
-                uselog=kwargs.get('uselog', True),
-                raise_=kwargs.get("raise_", True)
-            )
+        assert self, report(
+            f"{self._func.__name__} failed.",
+            uselog=kwargs.get('uselog', True),
+            raise_=kwargs.get("raise_", True)
+        )
 
-    def __enter__(self):
+    def __enter__(self) -> HANDLE:
         return self._handle
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Optional[type], exc_val: Optional[BaseException], exc_tb: Optional[Any]):
         if self:
             self._exitfunc(self._handle)
             self._handle = None
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return not self._is_invalid_handle()
 
     @abstractmethod
-    def __get_init_args__(self, *args, **kwargs): ...
+    def __get_init_args__(self, *args: Any, **kwargs: Any) -> tuple: ...
 
-    def _is_invalid_handle(self):
+
+    def _is_invalid_handle(self) -> bool:
         return self._handle is None
 
 class ProcessHandle(Handle_):
+    """
+    Process handle class.
+    """
     _func       = OpenProcess
     _exitfunc   = CloseHandle
 
-    def __get_init_args__(self, access, pid, uselog, raise_):
+    def __get_init_args__(self, access: int, pid: int, uselog: bool, raise_: bool) -> tuple:
         return access, False, pid
 
 class ThreadHandle(Handle_):
+    """
+    Thread handle class.
+    """
     _func       = OpenThread
     _exitfunc   = CloseHandle
 
-    def __get_init_args__(self, access, pid, uselog, raise_):
-        return access, False, pid
+    def __get_init_args__(self, access: int, tid: int, uselog: bool, raise_: bool) -> tuple:
+        return access, False, tid
 
 class CreateSnapshot(Handle_):
+    """
+    Snapshot handle class.
+    """
     _func       = CreateToolhelp32Snapshot
     _exitfunc   = CloseHandle
 
-    def __get_init_args__(self, access):
+    def __get_init_args__(self, access) -> tuple:
         return access, DWORD(0)
 
-    def _is_invalid_handle(self):
+    def _is_invalid_handle(self) -> bool:
         from module.device.platform.winapi.const_windows import INVALID_HANDLE_VALUE
         return self._handle == INVALID_HANDLE_VALUE
 
-def report(msg='',*args,reportstatus=True,statuscode=-1,uselog=True,level=40,raise_=True,exception=OSError,**kwargs):
+def report(
+        msg: str            = '',
+        *args: tuple,
+        reportstatus: bool  = True,
+        statuscode: int     = -1,
+        uselog: bool        = True,
+        level: int          = 40,
+        raise_: bool        = True,
+        exception: type     = OSError,
+        **kwargs: dict
+) -> None:
+    """
+    Report any exception.
+
+    Args:
+        msg (str): The message to report.
+        args (tuple): Additional arguments.
+        reportstatus (bool): Whether to report the status code.
+        statuscode (int): The status code to report.
+        uselog (bool): Whether to log the message.
+        level (int): Logging level
+        raise_ (bool): Flag indicating whether to raise an exception.
+        exception (Type[Exception]): Exception class to raise.
+        kwargs (dict): Additional keyword arguments.
+
+    Raises:
+        Optional[OSError]: The specified exception class if raise_ is True.
+    """
     message: list = [msg]
     if reportstatus:
         if statuscode == -1:
@@ -273,31 +314,53 @@ def report(msg='',*args,reportstatus=True,statuscode=-1,uselog=True,level=40,rai
     if raise_:
         raise exception(message)
 
-def fstr(formatstr):
+def fstr(formatstr) -> Union[int, str]:
+    """
+    Args:
+        formatstr (str):
+
+    Returns:
+        (int | str):
+    """
     try:
         return int(formatstr, 16)
     except ValueError:
         return formatstr.replace(r"\\", "/").replace("\\", "/").replace('"', '"')
 
-def open_process(access, pid, uselog=False, raise_=True):
+def open_process(access: int, pid: int, uselog: bool = False, raise_: bool = True) -> ProcessHandle:
     return ProcessHandle(access, pid, uselog=uselog, raise_=raise_)
 
-def open_thread(access, tid, uselog=False, raise_=True):
+def open_thread(access: int, tid: int, uselog: bool = False, raise_: bool = True) -> ThreadHandle:
     return ThreadHandle(access, tid, uselog=uselog, raise_=raise_)
 
-def create_snapshot(access):
+def create_snapshot(access: int) -> CreateSnapshot:
     return CreateSnapshot(access)
 
-def get_func_path(func):
+def get_func_path(func: Callable[..., Any]) -> str:
+    """
+    Get a function's relative path.
+
+    Args:
+        func (Callable[..., Any]):
+
+    Examples:
+        >>> print(get_func_path(report))
+        -> 'module.device.platform.winapi.functions_windows.report'
+        >>> print(get_func_path(FILETIME.__init_subclass__))
+        -> 'module.device.platform.winapi.structures_windows.Structure::__init_subclass__'
+
+    Returns:
+        str:
+    """
     funcpath: list = []
     if hasattr(func, '__module__'):
         funcpath.append(getattr(func, '__module__'))
     else:
         pass
     if hasattr(func, '__qualname__'):
-        funcpath.append(getattr(func, '__qualname__'))
+        funcpath.append(getattr(func, '__qualname__').replace('.', '::'))
     else:
-        funcpath.append(str(getattr(func, '__name__')).replace('.', '::'))
+        funcpath.append(getattr(func, '__name__').replace('.', '::'))
     funcpath: str = '.'.join(funcpath)
     return funcpath
 

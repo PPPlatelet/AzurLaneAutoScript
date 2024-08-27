@@ -1,6 +1,4 @@
-from typing import Callable, Generator, Tuple, Optional, List, Union
-
-from ctypes.wintypes import HWND, HANDLE
+from typing import Generator, List, Tuple
 
 from module.device.platform.emulator_windows import EmulatorInstance
 from module.device.platform.winapi import *
@@ -21,7 +19,7 @@ def close_handle(*args, fclose: Callable[[HANDLE], None] = CloseHandle) -> bool:
 def __yield_entries(
         entry32:    Union[PROCESSENTRY32W, THREADENTRY32],
         snapshot:   HANDLE,
-        func:       Callable[[HANDLE, Union[LPPROCESSENTRY32W, LPTHREADENTRY32]], bool]
+        func:       Callable[[HANDLE, Union[POINTER(PROCESSENTRY32W), POINTER(THREADENTRY32)]], bool]
 ) -> Generator[Union[PROCESSENTRY32W, THREADENTRY32], None, None]:
     """
     Generates a loop that yields entries from a snapshot until the function fails or finishes.
@@ -32,8 +30,7 @@ def __yield_entries(
         func (Process32Next | Thread32Next): Next entry.
 
     Yields:
-        PROCESSENTRY32W: Current process entry.
-        THREAD32ENTRY: Current thread entry.
+        (lppe32 | lpte32) (PROCESSENTRY32W | THREADENTRY32): Current process/thread entry.
 
     Raises:
         OSError: If any winapi failed.
@@ -46,7 +43,7 @@ def _enum_processes() -> Generator[PROCESSENTRY32W, None, None]:
     Enumerates all the processes currently running on the system.
 
     Yields:
-        PROCESSENTRY32: Current process entry.
+        lppe32 (PROCESSENTRY32): Current process entry.
 
     Raises:
         OSError: If CreateToolhelp32Snapshot or any winapi failed.
@@ -59,7 +56,7 @@ def _enum_threads() -> Generator[THREADENTRY32, None, None]:
     Enumerates all the threads currently running on the system.
 
     Yields:
-        THREADENTRY32: Current thread entry.
+        lpte32 (THREADENTRY32): Current thread entry.
 
     Raises:
         OSError: If CreateToolhelp32Snapshot or any winapi failed.
@@ -67,12 +64,12 @@ def _enum_threads() -> Generator[THREADENTRY32, None, None]:
     """
     pass
 
-def get_focused_window() -> Union[Tuple[HWND, WINDOWPLACEMENT], Tuple[HWND, None]]:
+def get_focused_window() -> Tuple[HWND, Optional[WINDOWPLACEMENT]]:
     """
     Retrieves the handle and placement of the currently focused window.
 
     Returns:
-        tuple(HWND, WINDOWPLACEMENT): Currently window's hwnd and placement.
+        (hwnd, wp) (HWND & WINDOWPLACEMENT): Currently window's hwnd and placement.
     """
     pass
 
@@ -81,7 +78,7 @@ def set_focus_to_window(focusedwindow: Tuple[HWND, Optional[WINDOWPLACEMENT]]) -
     Focus to a window.
 
     Args:
-        focusedwindow (tuple(hwnd, WINDOWPLACEMENT) | tuple(hwnd, None)): Focused window's hwnd and placement.
+        focusedwindow (Tuple(HWND, Optional[WINDOWPLACEMENT])): Focused window's hwnd and placement.
 
     Returns:
         bool:
@@ -103,7 +100,7 @@ def refresh_window(
         interval (float): The interval (in seconds) between attempts.
 
     Returns:
-        None
+        None:
     """
     pass
 
@@ -118,14 +115,16 @@ def execute(
     Args:
         command (str): Command-line arguments of the process.
         silentstart (bool): Window placement of the process.
-        start (bool): True if start emulator, False if not
-        Example:
-            '"E:\\Program Files\\Netease\\MuMu Player 12\\shell\\MuMuPlayer.exe" -v 1'
+        start (bool): True if start emulator, False if not.
+
+    Examples:
+        >>> print(execute('"E:/Program Files/Netease/MuMu Player 12/shell/MuMuPlayer.exe" -v 1', False, True))
+        -> 'PROCESS_INFORMATION(1, 2, 3, 4), (114514, WINDOWPLACEMENT(1, 2, 3, POINT(1, 2), POINT(1, 2), RECT(1, 2, 3, 4)))'
 
     Returns:
-        tuple(PROCESS_INFORMATION, tuple(HWND, WINDOWPLACEMENT)):
-            PROCESS_INFORMATION Structure of the new process and
-            the currently focused window's hwnd and placement.
+        (lpProcessInformation, focusedwindow) (Optional[PROCESS_INFORMATION], Tuple[HWND, Optional[WINDOWPLACEMENT]]):
+            PROCESS_INFORMATION structure of the new process,
+            Currently focused window's hwnd and placement.
 
     Raises:
         EmulatorLaunchFailedError: If CreateProcessW failed.
@@ -166,9 +165,11 @@ def get_cmdline(pid: int) -> str:
         pid (int): Process ID.
 
     Returns:
-        str: Command-line arguments of the process.
-        Example:
-            '"E:\\Program Files\\Netease\\MuMu Player 12\\shell\\MuMuPlayer.exe" -v 1'
+        cmdline (str): Command-line arguments of the process.
+
+    Examples:
+        >>> print(get_cmdline(12345))
+        '"E:/Program Files/Netease/MuMu Player 12/shell/MuMuPlayer.exe" -v 1'
     """
     pass
 
@@ -180,7 +181,7 @@ def kill_process_by_regex(regex: str) -> int:
         regex (str):
 
     Returns:
-        int: The number of processes that were killed.
+        count (int): The number of processes that were killed.
 
     Raises:
         OSError: If any winapi failed.
@@ -188,6 +189,7 @@ def kill_process_by_regex(regex: str) -> int:
     """
     pass
 
+LPFILETIME = POINTER(FILETIME)
 def __get_time(
         fopen:          Callable[[int, int, bool, bool], Union[ProcessHandle, ThreadHandle]],
         fgettime:       Callable[[HANDLE, LPFILETIME, LPFILETIME, LPFILETIME, LPFILETIME], bool],
@@ -262,7 +264,7 @@ def _get_process(pid: int) -> PROCESS_INFORMATION:
         pid (int): Process ID.
 
     Returns:
-        tuple(int | None, int | None, int, int): PROCESS_INFORMATION of the process.
+        tuple (int | None, int | None, int, int): PROCESS_INFORMATION of the process.
     """
     pass
 
@@ -274,7 +276,7 @@ def get_process(instance: EmulatorInstance) -> PROCESS_INFORMATION:
         instance (EmulatorInstance):
 
     Returns:
-        tuple(int | None, int | None, int, int): PROCESS_INFORMATION of the process.
+        tuple (int | None, int | None, int, int): PROCESS_INFORMATION of the process.
 
     Raises:
         OSError: If any winapi failed.
@@ -303,7 +305,7 @@ def get_parent_pid(pid: int) -> int:
         pid (int): Process ID.
 
     Returns:
-        int: Parent process ID.
+        ppid (int): Parent process ID.
     """
     pass
 
@@ -315,7 +317,7 @@ def get_exit_code(pid: int) -> int:
         pid (int): Process ID.
 
     Returns:
-        int: Exit code of the process
+        exit_code (int): Exit code of the process
     """
     pass
 

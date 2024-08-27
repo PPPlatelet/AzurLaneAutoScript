@@ -1,5 +1,5 @@
 from ctypes import \
-    POINTER, sizeof, Structure as _Structure, \
+    POINTER, sizeof, byref, Structure as _Structure, \
     c_int32, c_uint32, c_uint64, c_uint16, \
     c_wchar, c_void_p, c_ubyte, c_byte, c_long, c_ulong
 from ctypes.wintypes import MAX_PATH, FILETIME as _FILETIME
@@ -11,13 +11,38 @@ class IterationFinished(Exception): ...
 class Structure(_Structure):
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        cls.field_name = tuple(name for name, _ in cls._fields_)
-        cls.field_type = tuple(_type for _, _type in cls._fields_)
+        cls.field_name, cls.field_type = zip(*cls._fields_)
 
     def __eq__(self, other):
+        from re import search
         if not isinstance(other, self.__class__):
             return NotImplemented
-        return all(getattr(self, name) == getattr(other, name) for name in self.field_name)
+        def eq_obj(x, y, *args):
+            return any(isinstance(x, obj) and isinstance(y, obj) and x == y for obj in args)
+        def eq_ptr(x, y):
+            try:
+                return x.contents.value == y.contents.value
+            except AttributeError:
+                return x.contents == y.contents
+            except ValueError:
+                return True
+
+        for name, _type in self._fields_:
+            vself, vother = getattr(self, name), getattr(other, name)
+            if eq_obj(vself, vother, int, str, Structure):
+                continue
+            elif vself is None and vother is None:
+                continue
+            elif eq_ptr(vself, vother):
+                continue
+            match = search(r'\d+$', _type.__name__)
+            if match is None:
+                return False
+            if all(vself[i] == vother[i] for i in range(int(match.group()))):
+                continue
+            else:
+                return False
+        return True
 
     def __repr__(self):
         field_values = ', '.join(f"{name}={getattr(self, name)!r}" for name in self.field_name)
@@ -75,7 +100,7 @@ class Structure(_Structure):
         return len(self.field_name)
 
     def __dir__(self):
-        return super().__dir__()
+        return [attr for attr in super().__dir__() if not attr.startswith('_')]
 
     def __format__(self, format_spec):
         if format_spec == '':
@@ -108,11 +133,11 @@ class Structure(_Structure):
 
     def __exit__(self, exc_type, exc_val, exc_tb): ...
 
-    def __bytes__(self):
-        return bytes(str(self), 'utf-8')
-
     def __bool__(self):
         return any(getattr(self, name) for name in self.field_name)
+
+    def __call__(self):
+        return byref(self)
 
 # processthreadsapi.h line 28
 class PROCESS_INFORMATION(Structure):
@@ -240,7 +265,7 @@ class FILETIME(Structure, _FILETIME):
     def to_int(self):
         return (self.dwHighDateTime << 32) + self.dwLowDateTime
 
-class TIME(Structure):
+class TIMEINFO(Structure):
     _fields_ = [
         ("CreationTime",    FILETIME),
         ("ExitTime",        FILETIME),
