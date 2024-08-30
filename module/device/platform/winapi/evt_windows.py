@@ -47,15 +47,12 @@ class QueryEvt(Handle_):
     _exitfunc   = EvtClose
 
     def __enter__(self) -> EVT_HANDLE:
-        return EVT_HANDLE(self._handle)
+        return self._handle
 
     @staticmethod
     def __get_init_args__():
         query = "Event/System[EventID=4688]"
         return None, "Security", query, EVT_QUERY_REVERSE_DIRECTION | EVT_QUERY_CHANNEL_PATH
-
-    def _is_invalid_handle(self):
-        return self._handle is None
 
 class EvtData:
     def __init__(self, data: dict, dtime: datetime):

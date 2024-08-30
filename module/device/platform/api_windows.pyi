@@ -1,7 +1,11 @@
-from typing import Generator, List, Tuple
+from typing import Generator, NewType, List, Tuple
 
 from module.device.platform.emulator_windows import EmulatorInstance
 from module.device.platform.winapi import *
+
+LPPROCESSENTRY32W   = NewType('LPPROCESSENTRY32W',  POINTER(PROCESSENTRY32W))
+LPTHREADENTRY32     = NewType('LPTHREADENTRY32',    POINTER(THREADENTRY32))
+LPFILETIME          = NewType('LPFILETIME',         POINTER(FILETIME))
 
 def close_handle(*args, fclose: Callable[[HANDLE], None] = CloseHandle) -> bool:
     """
@@ -19,7 +23,7 @@ def close_handle(*args, fclose: Callable[[HANDLE], None] = CloseHandle) -> bool:
 def __yield_entries(
         entry32:    Union[PROCESSENTRY32W, THREADENTRY32],
         snapshot:   HANDLE,
-        func:       Callable[[HANDLE, Union[POINTER(PROCESSENTRY32W), POINTER(THREADENTRY32)]], bool]
+        func:       Callable[[HANDLE, Union[LPPROCESSENTRY32W, LPTHREADENTRY32]], bool]
 ) -> Generator[Union[PROCESSENTRY32W, THREADENTRY32], None, None]:
     """
     Generates a loop that yields entries from a snapshot until the function fails or finishes.
@@ -108,7 +112,7 @@ def execute(
         command: str,
         silentstart: bool,
         start: bool
-) -> Tuple[PROCESS_INFORMATION, Tuple[HWND, Optional[WINDOWPLACEMENT]]]:
+) -> Tuple[Optional[PROCESS_INFORMATION], Tuple[HWND, Optional[WINDOWPLACEMENT]]]:
     """
     Create a new process.
 
@@ -189,7 +193,6 @@ def kill_process_by_regex(regex: str) -> int:
     """
     pass
 
-LPFILETIME = POINTER(FILETIME)
 def __get_time(
         fopen:          Callable[[int, int, bool, bool], Union[ProcessHandle, ThreadHandle]],
         fgettime:       Callable[[HANDLE, LPFILETIME, LPFILETIME, LPFILETIME, LPFILETIME], bool],

@@ -116,8 +116,10 @@ def execute(command, silentstart, start):
     from os.path import dirname
     focusedwindow               = get_focused_window()
     if start:
-        threading.Thread(target=refresh_window, name='Refresh_Thread', args=(focusedwindow,)).start()
+        refresh_thread = threading.Thread(target=refresh_window, name='Refresh-Thread', args=(focusedwindow,))
+        refresh_thread.start()
 
+    """
     chandle = HANDLE()
     OpenProcessToken(GetCurrentProcess(), TOKEN_DUPLICATE, byref(chandle))
     hToken = HANDLE()
@@ -140,13 +142,14 @@ def execute(command, silentstart, start):
         None,
         None
     )
+    """
 
-    dwLogonFlags = DWORD(0)
+    # dwLogonFlags = DWORD(0)
     lpApplicationName           = split(command)[0]
     lpCommandLine               = command
-    # lpProcessAttributes         = None
-    # lpThreadAttributes          = None
-    # bInheritHandles             = False
+    lpProcessAttributes         = None
+    lpThreadAttributes          = None
+    bInheritHandles             = False
     dwCreationFlags             = (
         DETACHED_PROCESS |
         CREATE_UNICODE_ENVIRONMENT
@@ -162,11 +165,12 @@ def execute(command, silentstart, start):
         lpStartupInfo.wShowWindow   = SW_FORCEMINIMIZE
     lpProcessInformation        = PROCESS_INFORMATION()
 
-    assert CreateProcessWithTokenW(
-        hToken,
-        dwLogonFlags,
+    assert CreateProcessW(
         lpApplicationName,
         lpCommandLine,
+        lpProcessAttributes,
+        lpThreadAttributes,
+        bInheritHandles,
         dwCreationFlags,
         lpEnvironment,
         lpCurrentDirectory,
@@ -174,11 +178,11 @@ def execute(command, silentstart, start):
         byref(lpProcessInformation)
     ),  report("Failed to start emulator", exception=EmulatorLaunchFailedError)
 
-    if start:
-        return lpProcessInformation, focusedwindow
-    else:
+    if not start:
         close_handle(*lpProcessInformation[:2])
-        return None, focusedwindow
+        lpProcessInformation = None
+
+    return lpProcessInformation, focusedwindow
 
 
 def terminate_process(pid):

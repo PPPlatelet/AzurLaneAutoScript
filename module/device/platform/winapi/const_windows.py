@@ -1,5 +1,4 @@
 from sys import getwindowsversion
-from ctypes import c_void_p
 
 # winnt.h line 3961
 PROCESS_TERMINATE                   = 0x0001
@@ -161,11 +160,6 @@ PROFILE_SERVER                      = 0x40000000
 CREATE_IGNORE_SYSTEM_DEFAULT        = 0x80000000
 
 # winnt.h line 3614
-SECURITY_ANONYMOUS       = 0
-SECURITY_IDENTIFICATION  = 1
-SECURITY_IMPERSONATION   = 2
-SECURITY_DELEGATION      = 3
-
 TOKEN_ASSIGN_PRIMARY    = 0x0001
 TOKEN_DUPLICATE         = 0x0002
 TOKEN_IMPERSONATE       = 0x0004
@@ -176,7 +170,7 @@ TOKEN_ADJUST_GROUPS     = 0x0040
 TOKEN_ADJUST_DEFAULT    = 0x0080
 TOKEN_ADJUST_SESSIONID  = 0x0100
 
-TOKEN_ALL_ACCESS_P      = (
+TOKEN_ALL_ACCESS        = (
     STANDARD_RIGHTS_REQUIRED |
     TOKEN_ASSIGN_PRIMARY |
     TOKEN_DUPLICATE |
@@ -187,7 +181,6 @@ TOKEN_ALL_ACCESS_P      = (
     TOKEN_ADJUST_GROUPS |
     TOKEN_ADJUST_DEFAULT
 )
-TOKEN_ALL_ACCESS        = (TOKEN_ALL_ACCESS_P | TOKEN_ADJUST_SESSIONID)
 TOKEN_READ              = (STANDARD_RIGHTS_READ | TOKEN_QUERY)
 
 TOKEN_WRITE             = (
@@ -198,6 +191,7 @@ TOKEN_WRITE             = (
 )
 
 TOKEN_EXECUTE           = STANDARD_RIGHTS_EXECUTE
+TOKEN_SOURCE_LENGTH     = 8
 
 TOKEN_PRIMARY            = 1
 TOKEN_IMPERSONATION      = 2
@@ -209,7 +203,7 @@ SE_GROUP_OWNER              = 0x00000008
 SE_GROUP_USE_FOR_DENY_ONLY  = 0x00000010
 SE_GROUP_INTEGRITY          = 0x00000020
 SE_GROUP_INTEGRITY_ENABLED  = 0x00000040
-SE_GROUP_LOGON_ID           = 0xC0000000
+SE_GROUP_LOGON_ID           =-0x40000000
 SE_GROUP_RESOURCE           = 0x20000000
 
 SE_GROUP_VALID_ATTRIBUTES   = (
@@ -223,6 +217,42 @@ SE_GROUP_VALID_ATTRIBUTES   = (
     SE_GROUP_INTEGRITY |
     SE_GROUP_INTEGRITY_ENABLED
 )
+
+SE_OWNER_DEFAULTED              = 0x00000001
+SE_GROUP_DEFAULTED              = 0x00000002
+SE_DACL_PRESENT                 = 0x00000004
+SE_DACL_DEFAULTED               = 0x00000008
+SE_SACL_PRESENT                 = 0x00000010
+SE_SACL_DEFAULTED               = 0x00000020
+SE_SELF_RELATIVE                = 0x00008000
+SE_PRIVILEGE_ENABLED_BY_DEFAULT = 0x00000001
+SE_PRIVILEGE_ENABLED            = 0x00000002
+SE_PRIVILEGE_USED_FOR_ACCESS    =-0x80000000
+
+SE_CREATE_TOKEN_NAME        = "SeCreateTokenPrivilege"
+SE_ASSIGNPRIMARYTOKEN_NAME  = "SeAssignPrimaryTokenPrivilege"
+SE_LOCK_MEMORY_NAME         = "SeLockMemoryPrivilege"
+SE_INCREASE_QUOTA_NAME      = "SeIncreaseQuotaPrivilege"
+SE_UNSOLICITED_INPUT_NAME   = "SeUnsolicitedInputPrivilege"
+SE_MACHINE_ACCOUNT_NAME     = "SeMachineAccountPrivilege"
+SE_TCB_NAME                 = "SeTcbPrivilege"
+SE_SECURITY_NAME            = "SeSecurityPrivilege"
+SE_TAKE_OWNERSHIP_NAME      = "SeTakeOwnershipPrivilege"
+SE_LOAD_DRIVER_NAME         = "SeLoadDriverPrivilege"
+SE_SYSTEM_PROFILE_NAME      = "SeSystemProfilePrivilege"
+SE_SYSTEMTIME_NAME          = "SeSystemtimePrivilege"
+SE_PROF_SINGLE_PROCESS_NAME = "SeProfileSingleProcessPrivilege"
+SE_INC_BASE_PRIORITY_NAME   = "SeIncreaseBasePriorityPrivilege"
+SE_CREATE_PAGEFILE_NAME     = "SeCreatePagefilePrivilege"
+SE_CREATE_PERMANENT_NAME    = "SeCreatePermanentPrivilege"
+SE_BACKUP_NAME              = "SeBackupPrivilege"
+SE_RESTORE_NAME             = "SeRestorePrivilege"
+SE_SHUTDOWN_NAME            = "SeShutdownPrivilege"
+SE_DEBUG_NAME               = "SeDebugPrivilege"
+SE_AUDIT_NAME               = "SeAuditPrivilege"
+SE_SYSTEM_ENVIRONMENT_NAME  = "SeSystemEnvironmentPrivilege"
+SE_CHANGE_NOTIFY_NAME       = "SeChangeNotifyPrivilege"
+SE_REMOTE_SHUTDOWN_NAME     = "SeRemoteShutdownPrivilege"
 
 # subauth.h line 250
 STATUS_SUCCESS                  = 0x00000000
@@ -250,6 +280,6 @@ ERROR_SUCCESS = 0
 # winbase.h line 822
 INFINITE = 0xFFFFFFFF
 
-MAXULONGLONG            = c_void_p(-1).value
+MAXULONGLONG            = 0xFFFFFFFFFFFFFFFF
 INVALID_HANDLE_VALUE    = -1
 STILL_ACTIVE            = 0x00000103

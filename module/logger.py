@@ -328,10 +328,6 @@ def show():
     logger.info(r'Brace { [ ( ) ] }')
     logger.info(r'True, False, None')
     logger.info(r'E:/path\\to/alas/alas.exe, /root/alas/, ./relative/path/log.txt')
-    logger.info(r'./config\alas.json')
-    logger.info(r'[AdbBinary] E:\Program Files (x86)\AkkoAkko\python\AzurLaneAutoScript\toolkit\Lib\site-packages\adbutils\binaries\adb.exe')
-    logger.info(r'MuMuPlayer12(serial="127.0.0.1:16448", name="MuMuPlayer-12.0-2", path="E:/Program Files/Netease/MuMu Player 12/shell/MuMuPlayer.exe")')
-    logger.info(r'Found emulator instance: MuMuPlayer12(serial="127.0.0.1:16416", name="MuMuPlayer-12.0-1", path="E:/Program Files/Netease/MuMu Player 12/shell/MuMuPlayer.exe")')
     local_var1 = 'This is local variable'
     # Line before exception
     raise Exception("Exception")
