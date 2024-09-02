@@ -1,4 +1,5 @@
 from sys import getwindowsversion
+from ctypes import c_void_p
 
 # winnt.h line 3961
 PROCESS_TERMINATE                   = 0x0001
@@ -280,6 +281,6 @@ ERROR_SUCCESS = 0
 # winbase.h line 822
 INFINITE = 0xFFFFFFFF
 
-MAXULONGLONG            = 0xFFFFFFFFFFFFFFFF
+MAXULONGLONG            = c_void_p(-1).value
 INVALID_HANDLE_VALUE    = -1
 STILL_ACTIVE            = 0x00000103

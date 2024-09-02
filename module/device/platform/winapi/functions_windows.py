@@ -235,7 +235,7 @@ class Handle_(metaclass=ABCMeta):
 
 
     def _is_invalid_handle(self) -> bool:
-        return self._handle is None
+        return self._handle.value is None
 
 class ProcessHandle(Handle_):
     """
@@ -264,7 +264,7 @@ class CreateSnapshot(Handle_):
     _func       = CreateToolhelp32Snapshot
     _exitfunc   = CloseHandle
 
-    def __get_init_args__(self, access) -> tuple:
+    def __get_init_args__(self, access, uselog: bool, raise_: bool) -> tuple:
         return access, DWORD(0)
 
     def _is_invalid_handle(self) -> bool:
@@ -333,8 +333,8 @@ def open_process(access: int, pid: int, uselog: bool = False, raise_: bool = Tru
 def open_thread(access: int, tid: int, uselog: bool = False, raise_: bool = True) -> ThreadHandle:
     return ThreadHandle(access, tid, uselog=uselog, raise_=raise_)
 
-def create_snapshot(access: int) -> CreateSnapshot:
-    return CreateSnapshot(access)
+def create_snapshot(access: int, uselog: bool = False, raise_: bool = True) -> CreateSnapshot:
+    return CreateSnapshot(access, uselog=uselog, raise_=raise_)
 
 def get_func_path(func: Callable[..., Any]) -> str:
     """

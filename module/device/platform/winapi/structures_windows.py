@@ -1,12 +1,16 @@
+from re import search
+
 from ctypes import \
     POINTER, sizeof, byref, Structure as _Structure, \
     c_int32, c_uint32, c_uint64, c_uint16, \
     c_wchar, c_void_p, c_ubyte, c_byte, c_long, c_ulong
 from ctypes.wintypes import MAX_PATH, FILETIME as _FILETIME
 
-class EmulatorLaunchFailedError(Exception): ...
-class HwndNotFoundError(Exception): ...
-class IterationFinished(Exception): ...
+class WinApiBaseException(Exception): ...
+
+class EmulatorLaunchFailedError(WinApiBaseException): ...
+class HwndNotFoundError(WinApiBaseException): ...
+class IterationFinished(WinApiBaseException): ...
 
 class Structure(_Structure):
     def __init_subclass__(cls, **kwargs):
@@ -14,9 +18,6 @@ class Structure(_Structure):
         cls.field_name, cls.field_type = zip(*cls._fields_)
 
     def __eq__(self, other):
-        from re import search
-        if not isinstance(other, self.__class__):
-            return NotImplemented
         def eq_obj(x, y, *args):
             return any(isinstance(x, obj) and isinstance(y, obj) and x == y for obj in args)
         def eq_ptr(x, y):
@@ -26,6 +27,9 @@ class Structure(_Structure):
                 return x.contents == y.contents
             except ValueError:
                 return True
+
+        if not isinstance(other, self.__class__):
+            return NotImplemented
 
         for name, _type in self._fields_:
             vself, vother = getattr(self, name), getattr(other, name)
@@ -44,20 +48,35 @@ class Structure(_Structure):
                 return False
         return True
 
-    def __repr__(self):
-        field_values = ', '.join(f"{name}={getattr(self, name)!r}" for name in self.field_name)
-        return f"{self.__class__.__name__}({field_values})"
+    def __bool__(self):
+        def bool_obj(val, *args):
+            if isinstance(val, str):
+                return val != '\x00'
+            return any(isinstance(val, obj) and value for obj in args)
+        def bool_ptr(val):
+            try:
+                return bool(val.contents.value)
+            except AttributeError:
+                return bool(val.contents)
+            except ValueError:
+                return False
 
-    def __str__(self):
-        field_values = ', '.join(f"{name}={getattr(self, name)}" for name in self.field_name)
-        return f"{self.__class__.__name__}({field_values})"
-
-    def __sizeof__(self):
-        return sizeof(self)
-
-    def __iter__(self):
-        for name in self.field_name:
-            yield name, getattr(self, name)
+        for name, _type in self._fields_:
+            value = getattr(self, name)
+            if bool_obj(value, int, Structure):
+                return True
+            if value is None:
+                continue
+            if bool_ptr(value):
+                return True
+            match = search(r'\d+$', _type.__name__)
+            if match is None:
+                continue
+            if any(value[i] for i in range(int(match.group()))):
+                return True
+            else:
+                continue
+        return False
 
     def __setitem__(self, key, value):
         if isinstance(key, slice):
@@ -96,12 +115,6 @@ class Structure(_Structure):
         else:
             raise TypeError("Invalid argument type")
 
-    def __len__(self):
-        return len(self.field_name)
-
-    def __dir__(self):
-        return [attr for attr in super().__dir__() if not attr.startswith('_')]
-
     def __format__(self, format_spec):
         if format_spec == '':
             return str(self)
@@ -128,13 +141,31 @@ class Structure(_Structure):
         else:
             raise ValueError(f"Unsupported format specifier: {format_spec}")
 
+    def __len__(self):
+        return len(self.field_name)
+
+    def __dir__(self):
+        return [attr for attr in super().__dir__() if not attr.startswith('_')]
+
+    def __repr__(self):
+        field_values = ', '.join(f"{name}={getattr(self, name)!r}" for name in self.field_name)
+        return f"{self.__class__.__name__}({field_values})"
+
+    def __str__(self):
+        field_values = ', '.join(f"{name}={getattr(self, name)}" for name in self.field_name)
+        return f"{self.__class__.__name__}({field_values})"
+
+    def __sizeof__(self):
+        return sizeof(self)
+
+    def __iter__(self):
+        for name in self.field_name:
+            yield name, getattr(self, name)
+
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb): ...
-
-    def __bool__(self):
-        return any(getattr(self, name) for name in self.field_name)
 
     def __call__(self):
         return byref(self)

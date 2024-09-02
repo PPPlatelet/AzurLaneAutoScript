@@ -339,7 +339,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 self.process = self.get_process(self.emulator_instance)
                 return True
             cmdline = self.get_cmdline(self.process[2])
-            if self.emulator_instance.path in cmdline:
+            if self.emulator_instance.path.lower() in cmdline.lower():
                 return True
             else:
                 if not all(self.process[:2]):

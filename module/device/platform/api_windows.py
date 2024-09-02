@@ -47,16 +47,14 @@ def __yield_entries(entry32, snapshot, func):
 
 
 def _enum_processes() -> Generator[PROCESSENTRY32W, None, None]:
-    lppe32          = PROCESSENTRY32W()
-    lppe32.dwSize   = sizeof(PROCESSENTRY32W)
+    lppe32 = PROCESSENTRY32W(sizeof(PROCESSENTRY32W))
     with create_snapshot(TH32CS_SNAPPROCESS) as snapshot:
         assert Process32First(snapshot, byref(lppe32)), report("Process32First failed")
         yield from __yield_entries(lppe32, snapshot, Process32Next)
 
 
 def _enum_threads() -> Generator[THREADENTRY32, None, None]:
-    lpte32          = THREADENTRY32()
-    lpte32.dwSize   = sizeof(THREADENTRY32)
+    lpte32 = THREADENTRY32(sizeof(THREADENTRY32))
     with create_snapshot(TH32CS_SNAPTHREAD) as snapshot:
         assert Thread32First(snapshot, byref(lpte32)), report("Thread32First failed")
         yield from __yield_entries(lpte32, snapshot, Thread32Next)
@@ -64,8 +62,7 @@ def _enum_threads() -> Generator[THREADENTRY32, None, None]:
 
 def get_focused_window():
     hwnd = HWND(GetForegroundWindow())
-    wp = WINDOWPLACEMENT()
-    wp.length = sizeof(WINDOWPLACEMENT)
+    wp = WINDOWPLACEMENT(sizeof(WINDOWPLACEMENT))
     if GetWindowPlacement(hwnd, byref(wp)):
         return hwnd, wp
     else:
@@ -156,9 +153,7 @@ def execute(command, silentstart, start):
     )
     lpEnvironment               = None
     lpCurrentDirectory          = dirname(lpApplicationName)
-    lpStartupInfo               = STARTUPINFOW()
-    lpStartupInfo.cb            = sizeof(STARTUPINFOW)
-    lpStartupInfo.dwFlags       = STARTF_USESHOWWINDOW
+    lpStartupInfo               = STARTUPINFOW(sizeof(STARTUPINFOW), dwFlags = STARTF_USESHOWWINDOW)
     if start:
         lpStartupInfo.wShowWindow   = SW_FORCEMINIMIZE if silentstart else SW_MINIMIZE
     else:
@@ -261,16 +256,16 @@ def kill_process_by_regex(regex):
 
 def __get_time(fopen, fgettime, access, identification, select=0):
     with fopen(access, identification, False, False) as handle:
-        Time = TIMEINFO()
+        ti = TIMEINFO()
         if not fgettime(
             handle,
-            byref(Time.CreationTime),
-            byref(Time.ExitTime),
-            byref(Time.KernelTime),
-            byref(Time.UserTime)
+            byref(ti.CreationTime),
+            byref(ti.ExitTime),
+            byref(ti.KernelTime),
+            byref(ti.UserTime)
         ):
             return None
-        return Time[select].to_int()
+        return ti[select].to_int()
 
 def _get_process_creation_time(pid):
     return __get_time(open_process, GetProcessTimes, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, pid, 0)
@@ -302,11 +297,11 @@ def _get_process(pid):
     tid = get_thread(pid)
     pi = PROCESS_INFORMATION(None, None, pid, tid)
     try:
-        hProcess = OpenProcess(PROCESS_ALL_ACCESS, BOOL(False), ULONG(pid))
+        hProcess = OpenProcess(PROCESS_ALL_ACCESS, False, pid)
         assert hProcess is not None, \
             report("OpenProcess failed", level=30)
 
-        hThread = OpenThread(THREAD_ALL_ACCESS, BOOL(False), ULONG(tid))
+        hThread = OpenThread(THREAD_ALL_ACCESS, False, tid)
         if hThread is None:
             CloseHandle(hProcess)
             report("OpenThread failed", level=30)
@@ -322,10 +317,12 @@ def get_process(instance):
     for lppe32 in _enum_processes():
         pid = lppe32.th32ProcessID
         cmdline = get_cmdline(pid)
-        if not instance.path in cmdline:
+        if not instance.path.lower() in cmdline.lower():
             continue
         if instance == Emulator.MuMuPlayer12:
             match = re.search(r'-v\s*(\d+)', cmdline)
+            if match is None:
+                return _get_process(pid)
             if match and int(match.group(1)) == instance.MuMuPlayer12_id:
                 return _get_process(pid)
         elif instance == Emulator.LDPlayerFamily:
