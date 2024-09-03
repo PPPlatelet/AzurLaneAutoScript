@@ -1,3 +1,7 @@
+from module.device.env import IS_WINDOWS
+if not IS_WINDOWS:
+    raise OSError("Current environment isn't Windows")
+
 import threading
 import re
 from typing import Generator
@@ -18,13 +22,13 @@ def close_handle(*args, fclose=CloseHandle):
             fclose(handle)
             count += 1
             logger.info(f"Closed handle: {handle}")
-        else:
-            report(
-                f"Expected a int or c_void_p, but got {type(handle).__name__}",
-                reportstatus=False,
-                level=30,
-                raise_=False,
-            )
+            continue
+        report(
+            f"Expected a int or c_void_p, but got {type(handle).__name__}",
+            reportstatus=False,
+            level=30,
+            raise_=False,
+        )
     if not count:
         report(
             f"All handles are unavailable, please check the running environment",
@@ -63,11 +67,10 @@ def _enum_threads() -> Generator[THREADENTRY32, None, None]:
 def get_focused_window():
     hwnd = HWND(GetForegroundWindow())
     wp = WINDOWPLACEMENT(sizeof(WINDOWPLACEMENT))
-    if GetWindowPlacement(hwnd, byref(wp)):
-        return hwnd, wp
-    else:
+    if not GetWindowPlacement(hwnd, byref(wp)):
         report("Failed to get windowplacement", level=30, raise_=False)
-        return hwnd, None
+        wp = None
+    return hwnd, wp
 
 
 def set_focus_to_window(focusedwindow):
@@ -91,9 +94,8 @@ def refresh_window(focusedwindow, max_attempts=10, interval=0.5):
 
     while attempts < max_attempts:
         currentwindow = get_focused_window()
-        if prevwindow:
-            if unique(currentwindow, prevwindow, focusedwindow):
-                break
+        if prevwindow and unique(currentwindow, prevwindow, focusedwindow):
+            break
 
         if unique(focusedwindow, currentwindow):
             logger.info(f"Current window is {currentwindow[0]}, flash back to {focusedwindow[0]}")
@@ -153,11 +155,11 @@ def execute(command, silentstart, start):
     )
     lpEnvironment               = None
     lpCurrentDirectory          = dirname(lpApplicationName)
-    lpStartupInfo               = STARTUPINFOW(sizeof(STARTUPINFOW), dwFlags = STARTF_USESHOWWINDOW)
-    if start:
-        lpStartupInfo.wShowWindow   = SW_FORCEMINIMIZE if silentstart else SW_MINIMIZE
-    else:
-        lpStartupInfo.wShowWindow   = SW_FORCEMINIMIZE
+    lpStartupInfo               = STARTUPINFOW(
+        cb                      = sizeof(STARTUPINFOW),
+        dwFlags                 = STARTF_USESHOWWINDOW,
+        wShowWindow             = SW_FORCEMINIMIZE if silentstart else SW_MINIMIZE
+    )
     lpProcessInformation        = PROCESS_INFORMATION()
 
     assert CreateProcessW(
@@ -215,7 +217,7 @@ def get_cmdline(pid):
             returnlength = ULONG(sizeof(pbi))
             status = NtQueryInformationProcess(hProcess, 0, byref(pbi), sizeof(pbi), byref(returnlength))
             assert status == STATUS_SUCCESS, \
-                report(f"NtQueryInformationProcess failed. Status: 0x{status:08x}", uselog=False)
+                report(f"NtQueryInformationProcess failed. Status: 0x{status:08x}", level=30)
 
             # Read PEB
             peb = PEB()
@@ -317,6 +319,8 @@ def get_process(instance):
     for lppe32 in _enum_processes():
         pid = lppe32.th32ProcessID
         cmdline = get_cmdline(pid)
+        if not cmdline:
+            continue
         if not instance.path.lower() in cmdline.lower():
             continue
         if instance == Emulator.MuMuPlayer12:
@@ -330,8 +334,8 @@ def get_process(instance):
             if match and int(match.group(1)) == instance.LDPlayer_id:
                 return _get_process(pid)
         else:
-            matchname = re.search(fr'{instance.name}(\s+|$)', cmdline)
-            if matchname and matchname.group(0).strip() == instance.name:
+            match = re.search(fr'{instance.name}(\s+|$)', cmdline)
+            if match and match.group(0).strip() == instance.name:
                 return _get_process(pid)
 
 

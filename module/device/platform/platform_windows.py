@@ -5,7 +5,7 @@ from module.base.timer import Timer
 from module.device.connection import AdbDeviceWithStatus
 from module.device.platform.platform_base import PlatformBase
 from module.device.platform.emulator_windows import Emulator, EmulatorInstance, EmulatorManager
-from module.device.platform import api_windows
+from module.device.platform import api_windows as winapi
 from module.logger import logger
 
 
@@ -24,23 +24,18 @@ class PlatformWindows(PlatformBase, EmulatorManager):
     focusedwindow: tuple    = ()
 
     def __execute(self, command: str, start: bool) -> bool:
-        command = api_windows.fstr(command)
+        command = winapi.fstr(command)
         logger.info(f'Execute: {command}')
 
-        if self.config.Emulator_SilentStart == 'normal':
-            silentstart = False
-        else:
-            silentstart = True
+        silentstart = False if self.config.Emulator_SilentStart == 'normal' else True
 
-        if self.process:
-            if not all(self.process[:2]):
-                api_windows.close_handle(*self.process[:2])
-                self.process = None
+        if self.process is not None and not all(handle is not None for handle in self.process[:2]):
+            winapi.close_handle(*self.process[:2])
+            self.process = None
 
-        if self.hwnds:
-            self.hwnds = []
+        self.hwnds = []
 
-        self.process, self.focusedwindow = api_windows.execute(command, silentstart, start)
+        self.process, self.focusedwindow = winapi.execute(command, silentstart, start)
         return True
 
     def _start(self, command: str) -> bool:
@@ -51,27 +46,27 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
     @staticmethod
     def kill_process_by_regex(regex: str) -> int:
-        return api_windows.kill_process_by_regex(regex)
+        return winapi.kill_process_by_regex(regex)
 
     @staticmethod
     def get_focused_window() -> tuple:
-        return api_windows.get_focused_window()
+        return winapi.get_focused_window()
 
     @staticmethod
     def set_focus_to_window(focusedwindow) -> bool:
-        return api_windows.set_focus_to_window(focusedwindow)
+        return winapi.set_focus_to_window(focusedwindow)
 
     @staticmethod
     def get_hwnds(pid: int) -> list:
-        return api_windows.get_hwnds(pid)
+        return winapi.get_hwnds(pid)
 
     @staticmethod
-    def get_process(instance: Optional[EmulatorInstance]) -> api_windows.PROCESS_INFORMATION:
-        return api_windows.get_process(instance)
+    def get_process(instance: Optional[EmulatorInstance]) -> winapi.PROCESS_INFORMATION:
+        return winapi.get_process(instance)
 
     @staticmethod
     def get_cmdline(pid: int) -> str:
-        return api_windows.get_cmdline(pid)
+        return winapi.get_cmdline(pid)
 
     def switch_window(self) -> bool:
         if not self.process:
@@ -80,11 +75,11 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             self.hwnds = self.get_hwnds(self.process[2])
         method = self.config.Emulator_SilentStart
         if method == 'normal':
-            return api_windows.switch_window(self.hwnds, api_windows.SW_SHOW)
+            return winapi.switch_window(self.hwnds, winapi.SW_SHOW)
         elif method == 'minimize':
-            return api_windows.switch_window(self.hwnds, api_windows.SW_MINIMIZE)
+            return winapi.switch_window(self.hwnds, winapi.SW_MINIMIZE)
         elif method == 'silent':
-            return api_windows.switch_window(self.hwnds, api_windows.SW_HIDE)
+            return winapi.switch_window(self.hwnds, winapi.SW_HIDE)
         else:
             from module.exception import ScriptError
             raise ScriptError("Wrong setting")
@@ -281,9 +276,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
             # Check azuelane package
             packages = self.list_known_packages(show_log=False)
-            if len(packages):
-                pass
-            else:
+            if not len(packages):
                 continue
             show_package(packages)
 
@@ -306,12 +299,10 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 # Success
                 self.emulator_start_watch()
                 return True
-            else:
-                # Failed to start, stop and start again
-                if self._emulator_function_wrapper(self._emulator_stop):
-                    continue
-                else:
-                    return False
+            # Failed to start, stop and start again
+            if self._emulator_function_wrapper(self._emulator_stop):
+                continue
+            return False
 
         logger.error('Failed to start emulator 3 times, stopped')
         return False
@@ -323,42 +314,36 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             if self._emulator_function_wrapper(self._emulator_stop):
                 # Success
                 return True
-            else:
-                # Failed to stop, start and stop again
-                if self._emulator_function_wrapper(self._emulator_start):
-                    continue
-                else:
-                    return False
+            # Failed to stop, start and stop again
+            if self._emulator_function_wrapper(self._emulator_start):
+                continue
+            return False
 
         logger.error('Failed to stop emulator 3 times, stopped')
         return False
 
     def emulator_check(self) -> bool:
         try:
-            if not self.process:
+            if not isinstance(self.process, winapi.PROCESS_INFORMATION):
                 self.process = self.get_process(self.emulator_instance)
                 return True
             cmdline = self.get_cmdline(self.process[2])
             if self.emulator_instance.path.lower() in cmdline.lower():
                 return True
-            else:
-                if not all(self.process[:2]):
-                    api_windows.close_handle(*self.process[:2])
-                    self.process = None
-                raise ProcessLookupError
-        except api_windows.IterationFinished:
-            return False
-        except IndexError:
+            if not all(handle is not None for handle in self.process[:2]):
+                winapi.close_handle(*self.process[:2])
+                self.process = None
+            raise ProcessLookupError
+        except (winapi.IterationFinished, IndexError):
             return False
         except ProcessLookupError:
             return self.emulator_check()
         except OSError as e:
             logger.error(e)
-            raise
+            raise e
         except Exception as e:
             logger.exception(e)
-            raise
-
+            raise e
 
 if __name__ == '__main__':
     self = PlatformWindows('alas')

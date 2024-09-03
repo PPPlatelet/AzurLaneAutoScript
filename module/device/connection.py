@@ -5,6 +5,7 @@ import socket
 import subprocess
 import time
 from functools import wraps
+import threading
 
 import uiautomator2 as u2
 from adbutils import AdbClient, AdbDevice, AdbTimeout, ForwardItem, ReverseItem
@@ -102,13 +103,31 @@ class AdbDeviceWithStatus(AdbDevice):
         return 16384 <= self.port <= 17408
 
 
-class Connection(ConnectionAttr):
+class SingletonMeta(type):
+    _instances = {}
+    _lock = threading.Lock()
+
+    def __call__(cls, *args, **kwargs):
+        with cls._lock:
+            if cls not in cls._instances:
+                instance = super().__call__(*args, **kwargs)
+                cls._instances[cls] = instance
+        return cls._instances[cls]
+
+
+class Connection(ConnectionAttr, metaclass=SingletonMeta):
+    _initialized = False
+
     def __init__(self, config):
         """
         Args:
             config (AzurLaneConfig, str): Name of the user config under ./config
         """
         super().__init__(config)
+        if not Connection._initialized:
+            Connection._initialized = True
+            return
+
         if not self.is_over_http:
             self.detect_device()
 

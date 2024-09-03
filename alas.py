@@ -162,6 +162,19 @@ class AzurLaneAutoScript:
             with open(f'{folder}/log.txt', 'w', encoding='utf-8') as f:
                 f.writelines(lines)
 
+    def emulator_check(self):
+        from module.device.platform import Platform
+        return Platform(self.config).emulator_check()
+
+    def reboot(self):
+        from module.device.platform import Platform
+        logger.warning('Emulator is not running')
+        p = Platform(self.config)
+        p.emulator_stop()
+        p.emulator_start()
+        self.run('start')
+        del_cached_property(self, 'config')
+
     def restart(self):
         from module.handler.login import LoginHandler
         LoginHandler(self.config, device=self.device).app_restart()
@@ -441,14 +454,6 @@ class AzurLaneAutoScript:
             if self.config.should_reload():
                 return False
 
-    def emurestart(self, task):
-        logger.warning('Emulator is not running')
-        self.device.emulator_stop()
-        self.device.emulator_start()
-        if task != 'Restart':
-            self.run('start')
-        del_cached_property(self, 'config')
-
     def get_next_task(self):
         """
         Returns:
@@ -520,7 +525,7 @@ class AzurLaneAutoScript:
                         not self.device.emulator_check() and
                         method != 'stop_emulator'
                     ):
-                        self.emurestart(task.command)
+                        self.reboot()
                     continue
             else:
                 logger.warning(f'Invalid Optimization_WhenTaskQueueEmpty: {method}, fallback to stay_there')
@@ -556,13 +561,12 @@ class AzurLaneAutoScript:
                 del_cached_property(self, 'config')
                 logger.info('Server or network is recovered. Restart game client')
                 self.config.task_call('Restart')
+            if not self.emulator_check():
+                self.reboot()
             # Init device and change server
             _ = self.device
             # Get task
             task = self.get_next_task()
-            # Reboot emulator
-            if not self.device.emulator_check():
-                self.emurestart(task)
             self.device.config = self.config
             # Skip first restart
             if self.is_first_task and task == 'Restart':
