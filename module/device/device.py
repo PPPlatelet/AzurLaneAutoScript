@@ -15,7 +15,7 @@ from module.config.utils import get_server_next_update
 from module.device.app_control import AppControl
 from module.device.control import Control
 from module.device.screenshot import Screenshot
-from module.exception import (EmulatorNotRunningError, GameNotRunningError, GameStuckError, GameTooManyClickError,
+from module.exception import (GameNotRunningError, GameStuckError, GameTooManyClickError,
                               RequestHumanTakeover)
 from module.handler.assets import GET_MISSION
 from module.logger import logger
@@ -70,7 +70,6 @@ class Device(Screenshot, Control, AppControl):
     stuck_long_wait_list = ['BATTLE_STATUS_S', 'PAUSE', 'LOGIN_CHECK']
 
     def __init__(self, *args, **kwargs):
-        self.initialized = False
         super().__init__(*args, **kwargs)
 
         # Auto-fill emulator info
@@ -91,9 +90,7 @@ class Device(Screenshot, Control, AppControl):
             if self.config.Emulator_ControlMethod == 'minitouch':
                 self.early_minitouch_init()
 
-        if not self.initialized:
-            self.initialized = True
-            self.switch_window()
+        self.switch_window()
 
     def run_simple_screenshot_benchmark(self):
         """
@@ -340,11 +337,9 @@ class Device(Screenshot, Control, AppControl):
                 f'please set a correct serial'
             )
             raise
-        if not self.initialized:
-            self.initialized = True
         self.switch_window()
         self.stuck_record_clear()
         self.click_record_clear()
 
-    def switch_window(self):
-        return super().switch_window()
+    def switch_window(self, hwnds=None, arg=None):
+        return super().switch_window(hwnds, arg)

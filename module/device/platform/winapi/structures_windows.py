@@ -18,8 +18,8 @@ class Structure(_Structure):
         cls.field_name, cls.field_type = zip(*cls._fields_)
 
     def __eq__(self, other):
-        def eq_obj(x, y, *args):
-            return any(isinstance(x, obj) and isinstance(y, obj) and x == y for obj in args)
+        def eq_obj(x, y, *objs):
+            return any(isinstance(x, obj) and isinstance(y, obj) and x == y for obj in objs)
         def eq_ptr(x, y):
             try:
                 return x.contents.value == y.contents.value
@@ -49,10 +49,10 @@ class Structure(_Structure):
         return True
 
     def __bool__(self):
-        def bool_obj(val, *args):
+        def bool_obj(val, *objs):
             if isinstance(val, str):
                 return val != '\x00'
-            return any(isinstance(val, obj) and value for obj in args)
+            return any(isinstance(val, obj) and value for obj in objs)
         def bool_ptr(val):
             try:
                 return bool(val.contents.value)
@@ -123,7 +123,7 @@ class Structure(_Structure):
             for name in self.field_name:
                 value = getattr(self, name)
                 if isinstance(value, int):
-                    field_values.append(f"{name}=0b"+f"{value:b}".upper())
+                    field_values.append(f"{name}=0b"+f"{value:08b}".upper())
                 else:
                     field_values.append(f"{name}={value}")
             field_values: str = ', '.join(field_values)
@@ -133,7 +133,7 @@ class Structure(_Structure):
             for name in self.field_name:
                 value = getattr(self, name)
                 if isinstance(value, int):
-                    field_values.append(f"{name}=0x"+f"{value:x}".upper())
+                    field_values.append(f"{name}=0x"+f"{value:08x}".upper())
                 else:
                     field_values.append(f"{name}={value}")
             field_values: str = ', '.join(field_values)

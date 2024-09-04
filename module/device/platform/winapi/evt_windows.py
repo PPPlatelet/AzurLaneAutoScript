@@ -7,7 +7,7 @@ import threading
 from ctypes import WinDLL, POINTER, byref, create_unicode_buffer
 from ctypes.wintypes import HANDLE, LPCWSTR, DWORD, BOOL, LPVOID
 
-from module.device.platform.winapi.functions_windows import Handle_, fstr, GetLastError, report, IsUserAnAdmin
+from module.device.platform.winapi.functions_windows import Handle_, hex_or_normalize_path, GetLastError, report, IsUserAnAdmin
 from module.device.platform.winapi.const_windows import INFINITE, INVALID_HANDLE_VALUE, ERROR_SUCCESS
 from module.device.platform.api_windows import is_running, get_cmdline, terminate_process
 from module.logger import logger
@@ -103,7 +103,7 @@ class EventTree:
         system_time     = datetime.strptime(modifiedtime, '%Y-%m-%dT%H:%M:%S.%f%z').astimezone()
 
         fields          = ["NewProcessId", "NewProcessName", "ProcessId", "ParentProcessName"]
-        data            = {field: fstr(root.find(f'.//ns:Data[@Name="{field}"]', ns).text) for field in fields}
+        data            = {field: hex_or_normalize_path(root.find(f'.//ns:Data[@Name="{field}"]', ns).text) for field in fields}
 
         return EvtData(data, system_time)
 

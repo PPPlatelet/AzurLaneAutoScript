@@ -1,41 +1,43 @@
-from typing import Callable, Optional
+from typing import Callable
 
 from module.base.decorator import run_once
 from module.base.timer import Timer
 from module.device.connection import AdbDeviceWithStatus
 from module.device.platform.platform_base import PlatformBase
-from module.device.platform.emulator_windows import Emulator, EmulatorInstance, EmulatorManager
-from module.device.platform import api_windows as winapi
+from module.device.platform.emulator_windows import Emulator, EmulatorInstance
+from module.device.platform.api_windows import Winapi
+from module.device.platform.winapi.functions_windows import hex_or_normalize_path
+from module.device.platform.winapi.structures_windows import \
+    EmulatorLaunchFailedError, PROCESS_INFORMATION
 from module.logger import logger
-
 
 class EmulatorUnknown(Exception):
     pass
 
 
-class PlatformWindows(PlatformBase, EmulatorManager):
+class PlatformWindows(Winapi, PlatformBase):
     # Quadruple, contains the kernel process object, kernel thread object, process ID and thread ID.
     # If the kernel process object and kernel thread object are no longer used, PLEASE USE CloseHandle.
     # Otherwise, it'll crash the system in some cases.
-    process                 = None
+    process: PROCESS_INFORMATION = None
     # Window handles of the target process.
-    hwnds: list             = []
+    hwnds: list = []
     # Pair, contains the hwnd of the focused window and a WINDOWPLACEMENT object.
-    focusedwindow: tuple    = ()
+    focusedwindow: tuple = ()
 
     def __execute(self, command: str, start: bool) -> bool:
-        command = winapi.fstr(command)
+        command = hex_or_normalize_path(command)
         logger.info(f'Execute: {command}')
 
         silentstart = False if self.config.Emulator_SilentStart == 'normal' else True
 
         if self.process is not None and not all(handle is not None for handle in self.process[:2]):
-            winapi.close_handle(*self.process[:2])
+            self.close_handle(*self.process[:2])
             self.process = None
 
         self.hwnds = []
 
-        self.process, self.focusedwindow = winapi.execute(command, silentstart, start)
+        self.process, self.focusedwindow = self.execute(command, silentstart, start)
         return True
 
     def _start(self, command: str) -> bool:
@@ -44,45 +46,24 @@ class PlatformWindows(PlatformBase, EmulatorManager):
     def _stop(self, command: str) -> bool:
         return self.__execute(command, start=False)
 
-    @staticmethod
-    def kill_process_by_regex(regex: str) -> int:
-        return winapi.kill_process_by_regex(regex)
-
-    @staticmethod
-    def get_focused_window() -> tuple:
-        return winapi.get_focused_window()
-
-    @staticmethod
-    def set_focus_to_window(focusedwindow) -> bool:
-        return winapi.set_focus_to_window(focusedwindow)
-
-    @staticmethod
-    def get_hwnds(pid: int) -> list:
-        return winapi.get_hwnds(pid)
-
-    @staticmethod
-    def get_process(instance: Optional[EmulatorInstance]) -> winapi.PROCESS_INFORMATION:
-        return winapi.get_process(instance)
-
-    @staticmethod
-    def get_cmdline(pid: int) -> str:
-        return winapi.get_cmdline(pid)
-
-    def switch_window(self) -> bool:
+    def switch_window(self, hwnds=None, arg=None) -> bool:
         if not self.process:
             self.process = self.get_process(self.emulator_instance)
         if not self.hwnds:
             self.hwnds = self.get_hwnds(self.process[2])
+        if hwnds is None:
+            hwnds = self.hwnds
         method = self.config.Emulator_SilentStart
-        if method == 'normal':
-            return winapi.switch_window(self.hwnds, winapi.SW_SHOW)
-        elif method == 'minimize':
-            return winapi.switch_window(self.hwnds, winapi.SW_MINIMIZE)
-        elif method == 'silent':
-            return winapi.switch_window(self.hwnds, winapi.SW_HIDE)
+        if method == 'normal' and arg is None:
+            arg = self.SW_SHOW
+        elif method == 'minimize' and arg is None:
+            arg = self.SW_MINIMIZE
+        elif method == 'silent' and arg is None:
+            arg = self.SW_HIDE
         else:
             from module.exception import ScriptError
             raise ScriptError("Wrong setting")
+        return super().switch_window(hwnds, arg)
 
     def _emulator_start(self, instance: EmulatorInstance):
         """
@@ -198,6 +179,8 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 logger.error('To start/stop MumuAppPlayer, ALAS needs to be run as administrator')
         except EmulatorUnknown as e:
             logger.error(e)
+        except EmulatorLaunchFailedError as e:
+            logger.exception(e)
         except Exception as e:
             logger.exception(e)
 
@@ -321,29 +304,6 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
         logger.error('Failed to stop emulator 3 times, stopped')
         return False
-
-    def emulator_check(self) -> bool:
-        try:
-            if not isinstance(self.process, winapi.PROCESS_INFORMATION):
-                self.process = self.get_process(self.emulator_instance)
-                return True
-            cmdline = self.get_cmdline(self.process[2])
-            if self.emulator_instance.path.lower() in cmdline.lower():
-                return True
-            if not all(handle is not None for handle in self.process[:2]):
-                winapi.close_handle(*self.process[:2])
-                self.process = None
-            raise ProcessLookupError
-        except (winapi.IterationFinished, IndexError):
-            return False
-        except ProcessLookupError:
-            return self.emulator_check()
-        except OSError as e:
-            logger.error(e)
-            raise e
-        except Exception as e:
-            logger.exception(e)
-            raise e
 
 if __name__ == '__main__':
     self = PlatformWindows('alas')

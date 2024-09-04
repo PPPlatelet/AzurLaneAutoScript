@@ -525,7 +525,7 @@ class AzurLaneAutoScript:
                         not self.device.emulator_check() and
                         method != 'stop_emulator'
                     ):
-                        self.reboot()
+                        self.run('reboot')
                     continue
             else:
                 logger.warning(f'Invalid Optimization_WhenTaskQueueEmpty: {method}, fallback to stay_there')
@@ -561,6 +561,7 @@ class AzurLaneAutoScript:
                 del_cached_property(self, 'config')
                 logger.info('Server or network is recovered. Restart game client')
                 self.config.task_call('Restart')
+            # Reboot emulator
             if not self.emulator_check():
                 self.reboot()
             # Init device and change server
