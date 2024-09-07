@@ -4,18 +4,16 @@ from module.base.decorator import run_once
 from module.base.timer import Timer
 from module.device.connection import AdbDeviceWithStatus
 from module.device.platform.platform_base import PlatformBase
-from module.device.platform.emulator_windows import Emulator, EmulatorInstance
+from module.device.platform.emulator_windows import Emulator, EmulatorInstance, EmulatorManager
 from module.device.platform.api_windows import Winapi
-from module.device.platform.winapi.functions_windows import hex_or_normalize_path
-from module.device.platform.winapi.structures_windows import \
-    EmulatorLaunchFailedError, PROCESS_INFORMATION
+from module.device.platform.winapi import \
+    hex_or_normalize_path, EmulatorLaunchFailedError, PROCESS_INFORMATION, IterationFinished
 from module.logger import logger
 
 class EmulatorUnknown(Exception):
     pass
 
-
-class PlatformWindows(Winapi, PlatformBase):
+class PlatformWindows(PlatformBase, EmulatorManager, Winapi):
     # Quadruple, contains the kernel process object, kernel thread object, process ID and thread ID.
     # If the kernel process object and kernel thread object are no longer used, PLEASE USE CloseHandle.
     # Otherwise, it'll crash the system in some cases.
@@ -25,14 +23,17 @@ class PlatformWindows(Winapi, PlatformBase):
     # Pair, contains the hwnd of the focused window and a WINDOWPLACEMENT object.
     focusedwindow: tuple = ()
 
+    def __new__(cls, *args, **kwargs): # Multiton Pattern
+        return super(PlatformWindows, cls).__new__(cls)
+
     def __execute(self, command: str, start: bool) -> bool:
         command = hex_or_normalize_path(command)
         logger.info(f'Execute: {command}')
 
         silentstart = False if self.config.Emulator_SilentStart == 'normal' else True
 
-        if self.process is not None and not all(handle is not None for handle in self.process[:2]):
-            self.close_handle(*self.process[:2])
+        if self.process is not None and not all(self.process[:2]):
+            self.close_handle(handles=self.process[:2])
             self.process = None
 
         self.hwnds = []
@@ -47,7 +48,7 @@ class PlatformWindows(Winapi, PlatformBase):
         return self.__execute(command, start=False)
 
     def switch_window(self, hwnds=None, arg=None) -> bool:
-        if not self.process:
+        if self.process is None:
             self.process = self.get_process(self.emulator_instance)
         if not self.hwnds:
             self.hwnds = self.get_hwnds(self.process[2])
@@ -304,6 +305,29 @@ class PlatformWindows(Winapi, PlatformBase):
 
         logger.error('Failed to stop emulator 3 times, stopped')
         return False
+
+    def emulator_check(self) -> bool:
+        try:
+            if not isinstance(self.process, PROCESS_INFORMATION):
+                self.process = self.get_process(self.emulator_instance)
+                return True
+            cmdline = self.get_cmdline(self.process[2])
+            if self.emulator_instance.path.lower() in cmdline.lower():
+                return True
+            if not all(self.process[:2]):
+                self.close_handle(handles=self.process[:2])
+                self.process = None
+            raise ProcessLookupError
+        except (IterationFinished, IndexError):
+            return False
+        except ProcessLookupError:
+            return self.emulator_check()
+        except (OSError, AttributeError) as e:
+            logger.error(e)
+            raise e
+        except Exception as e:
+            logger.exception(e)
+            raise e
 
 if __name__ == '__main__':
     self = PlatformWindows('alas')

@@ -1,7 +1,7 @@
 import threading
 from sys import getwindowsversion
 
-from ctypes import c_void_p
+from ctypes import c_void_p, c_byte
 
 class SingletonMeta(type):
     _instances = {}
@@ -10,8 +10,7 @@ class SingletonMeta(type):
     def __call__(cls, *args, **kwargs):
         with cls._lock:
             if cls not in cls._instances:
-                instance = super().__call__(*args, **kwargs)
-                cls._instances[cls] = instance
+                cls._instances[cls] = super().__call__(*args, **kwargs)
         return cls._instances[cls]
 
 class WinapiConstants(metaclass=SingletonMeta):
@@ -43,17 +42,34 @@ class WinapiConstants(metaclass=SingletonMeta):
     THREAD_QUERY_LIMITED_INFORMATION    = 0x0800
 
     # winnt.h line 2805
+    STANDARD_RIGHTS_REQUIRED    = 0x000F0000
     DELETE                      = 0x00010000
     READ_CONTROL                = 0x00020000
     WRITE_DAC                   = 0x00040000
     WRITE_OWNER                 = 0x00080000
     SYNCHRONIZE                 = 0x00100000
 
-    STANDARD_RIGHTS_REQUIRED    = 0x000F0000
+    FILE_ALL_ACCESS             = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0x1FF
+
+    GENERIC_READ                = 0x80000000
+    GENERIC_WRITE               = 0x40000000
+    GENERIC_EXECUTE             = 0x20000000
+    GENERIC_ALL                 = 0x10000000
+
+    SECURITY_DESCRIPTOR_REVISION    = 1
+    ACL_REVISION                    = 2
 
     STANDARD_RIGHTS_READ        = READ_CONTROL
     STANDARD_RIGHTS_WRITE       = READ_CONTROL
     STANDARD_RIGHTS_EXECUTE     = READ_CONTROL
+
+    SECURITY_AUTHENTICATED_USER_RID = 0x0000000B
+    SECURITY_LOCAL_SYSTEM_RID       = 0x00000010
+    SECURITY_BUILTIN_DOMAIN_RID     = 0x00000020
+    SECURITY_WORLD_RID              = 0x00000000
+    SECURITY_NT_AUTHORITY           = c_byte(5)
+    DOMAIN_GROUP_RID_ADMINS         = 0x00000200
+    DOMAIN_ALIAS_RID_ADMINS         = 0x00000220
 
     STANDARD_RIGHTS_ALL         = 0x001F0000
 
@@ -61,11 +77,6 @@ class WinapiConstants(metaclass=SingletonMeta):
 
     ACCESS_SYSTEM_SECURITY      = 0x01000000
     MAXIMUM_ALLOWED             = 0x02000000
-
-    GENERIC_READ                = 0x80000000
-    GENERIC_WRITE               = 0x40000000
-    GENERIC_EXECUTE             = 0x20000000
-    GENERIC_ALL                 = 0x10000000
 
     VERSIONINFO                 = getwindowsversion()
     MAJOR, MINOR, BUILD         = VERSIONINFO.major, VERSIONINFO.minor, VERSIONINFO.build
@@ -175,6 +186,12 @@ class WinapiConstants(metaclass=SingletonMeta):
     CREATE_IGNORE_SYSTEM_DEFAULT        = 0x80000000
 
     # winnt.h line 3614
+    SECURITY_ANONYMOUS      = 0
+    SECURITY_IDENTIFICATION = 1
+    SECURITY_IMPERSONATION  = 2
+    SECURITY_DELEGATION     = 3
+
+    # winnt.h line 3614
     TOKEN_ASSIGN_PRIMARY    = 0x0001
     TOKEN_DUPLICATE         = 0x0002
     TOKEN_IMPERSONATE       = 0x0004
@@ -185,7 +202,7 @@ class WinapiConstants(metaclass=SingletonMeta):
     TOKEN_ADJUST_DEFAULT    = 0x0080
     TOKEN_ADJUST_SESSIONID  = 0x0100
 
-    TOKEN_ALL_ACCESS        = (
+    TOKEN_ALL_ACCESS            = (
         STANDARD_RIGHTS_REQUIRED |
         TOKEN_ASSIGN_PRIMARY |
         TOKEN_DUPLICATE |
@@ -196,78 +213,42 @@ class WinapiConstants(metaclass=SingletonMeta):
         TOKEN_ADJUST_GROUPS |
         TOKEN_ADJUST_DEFAULT
     )
-    TOKEN_READ              = (STANDARD_RIGHTS_READ | TOKEN_QUERY)
-
-    TOKEN_WRITE             = (
+    TOKEN_READ                  = (STANDARD_RIGHTS_READ | TOKEN_QUERY)
+    TOKEN_WRITE                 = (
         STANDARD_RIGHTS_WRITE |
         TOKEN_ADJUST_PRIVILEGES |
         TOKEN_ADJUST_GROUPS |
         TOKEN_ADJUST_DEFAULT
     )
+    TOKEN_EXECUTE               = STANDARD_RIGHTS_EXECUTE
+    TOKEN_SOURCE_LENGTH         = 0x00000008
+    TOKEN_PRIMARY               = 0x00000001
+    TOKEN_IMPERSONATION         = 0x00000002
 
-    TOKEN_EXECUTE           = STANDARD_RIGHTS_EXECUTE
-    TOKEN_SOURCE_LENGTH     = 8
+    LOGON_WITH_PROFILE          = 0x00000001
+    LOGON_NETCREDENTIALS_ONLY   = 0x00000002
 
-    TOKEN_PRIMARY            = 1
-    TOKEN_IMPERSONATION      = 2
+    SECURITY_ANONYMOUS_LOGON_RID    = 0x00000007
+    SECURITY_AUTHENTICATED_USER_RID = 0x0000000B
+    SECURITY_LOCAL_SYSTEM_RID       = 0x00000012
+    SECURITY_BUILTIN_DOMAIN_RID     = 0x00000020
+
+    SE_PRIVELEGE_DISABLED           = 0x00000000
+    SE_PRIVILEGE_ENABLED_BY_DEFAULT = 0x00000001
+    SE_PRIVILEGE_ENABLED            = 0x00000002
+    SE_PRIVILEGE_USED_FOR_ACCESS    = 0x00000000
 
     SE_GROUP_MANDATORY          = 0x00000001
     SE_GROUP_ENABLED_BY_DEFAULT = 0x00000002
     SE_GROUP_ENABLED            = 0x00000004
     SE_GROUP_OWNER              = 0x00000008
     SE_GROUP_USE_FOR_DENY_ONLY  = 0x00000010
-    SE_GROUP_INTEGRITY          = 0x00000020
-    SE_GROUP_INTEGRITY_ENABLED  = 0x00000040
-    SE_GROUP_LOGON_ID           =-0x40000000
+    SE_GROUP_LOGON_ID           = 0xC0000000
     SE_GROUP_RESOURCE           = 0x20000000
 
-    SE_GROUP_VALID_ATTRIBUTES   = (
-        SE_GROUP_MANDATORY |
-        SE_GROUP_ENABLED_BY_DEFAULT |
-        SE_GROUP_ENABLED |
-        SE_GROUP_OWNER |
-        SE_GROUP_USE_FOR_DENY_ONLY |
-        SE_GROUP_LOGON_ID |
-        SE_GROUP_RESOURCE |
-        SE_GROUP_INTEGRITY |
-        SE_GROUP_INTEGRITY_ENABLED
-    )
-
-    SE_OWNER_DEFAULTED              = 0x00000001
-    SE_GROUP_DEFAULTED              = 0x00000002
-    SE_DACL_PRESENT                 = 0x00000004
-    SE_DACL_DEFAULTED               = 0x00000008
-    SE_SACL_PRESENT                 = 0x00000010
-    SE_SACL_DEFAULTED               = 0x00000020
-    SE_SELF_RELATIVE                = 0x00008000
-    SE_PRIVILEGE_ENABLED_BY_DEFAULT = 0x00000001
-    SE_PRIVILEGE_ENABLED            = 0x00000002
-    SE_PRIVILEGE_USED_FOR_ACCESS    =-0x80000000
-
-    SE_CREATE_TOKEN_NAME        = "SeCreateTokenPrivilege"
-    SE_ASSIGNPRIMARYTOKEN_NAME  = "SeAssignPrimaryTokenPrivilege"
-    SE_LOCK_MEMORY_NAME         = "SeLockMemoryPrivilege"
-    SE_INCREASE_QUOTA_NAME      = "SeIncreaseQuotaPrivilege"
-    SE_UNSOLICITED_INPUT_NAME   = "SeUnsolicitedInputPrivilege"
-    SE_MACHINE_ACCOUNT_NAME     = "SeMachineAccountPrivilege"
-    SE_TCB_NAME                 = "SeTcbPrivilege"
-    SE_SECURITY_NAME            = "SeSecurityPrivilege"
-    SE_TAKE_OWNERSHIP_NAME      = "SeTakeOwnershipPrivilege"
-    SE_LOAD_DRIVER_NAME         = "SeLoadDriverPrivilege"
-    SE_SYSTEM_PROFILE_NAME      = "SeSystemProfilePrivilege"
-    SE_SYSTEMTIME_NAME          = "SeSystemtimePrivilege"
-    SE_PROF_SINGLE_PROCESS_NAME = "SeProfileSingleProcessPrivilege"
-    SE_INC_BASE_PRIORITY_NAME   = "SeIncreaseBasePriorityPrivilege"
-    SE_CREATE_PAGEFILE_NAME     = "SeCreatePagefilePrivilege"
-    SE_CREATE_PERMANENT_NAME    = "SeCreatePermanentPrivilege"
-    SE_BACKUP_NAME              = "SeBackupPrivilege"
-    SE_RESTORE_NAME             = "SeRestorePrivilege"
-    SE_SHUTDOWN_NAME            = "SeShutdownPrivilege"
-    SE_DEBUG_NAME               = "SeDebugPrivilege"
-    SE_AUDIT_NAME               = "SeAuditPrivilege"
-    SE_SYSTEM_ENVIRONMENT_NAME  = "SeSystemEnvironmentPrivilege"
-    SE_CHANGE_NOTIFY_NAME       = "SeChangeNotifyPrivilege"
-    SE_REMOTE_SHUTDOWN_NAME     = "SeRemoteShutdownPrivilege"
+    DUPLICATE_CLOSE_SOURCE      = 0x00000001
+    DUPLICATE_SAME_ACCESS       = 0x00000002
+    DUPLICATE_SAME_ATTRIBUTES   = 0x00000004
 
     # subauth.h line 250
     STATUS_SUCCESS                  = 0x00000000

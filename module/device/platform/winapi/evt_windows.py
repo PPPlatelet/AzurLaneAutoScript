@@ -1,5 +1,6 @@
 from datetime import datetime
 import re
+
 from queue import Queue
 import asyncio
 import threading
@@ -7,52 +8,103 @@ import threading
 from ctypes import WinDLL, POINTER, byref, create_unicode_buffer
 from ctypes.wintypes import HANDLE, LPCWSTR, DWORD, BOOL, LPVOID
 
-from module.device.platform.winapi.functions_windows import Handle_, hex_or_normalize_path, GetLastError, report, IsUserAnAdmin
-from module.device.platform.winapi.const_windows import INFINITE, INVALID_HANDLE_VALUE, ERROR_SUCCESS
-from module.device.platform.api_windows import is_running, get_cmdline, terminate_process
+from module.device.platform.api_windows import Winapi
+from module.device.platform.winapi import Handle_, hex_or_normalize_path, WinapiFunctions
 from module.logger import logger
 
-# winevt.h line 156
-EVT_QUERY_CHANNEL_PATH          = 0x1
-EVT_QUERY_FILE_PATH             = 0x2
-EVT_QUERY_FORWARD_DIRECTION     = 0x100
-EVT_QUERY_REVERSE_DIRECTION     = 0x200
-EVT_QUERY_TOLERATE_QUERY_ERRORS = 0x1000
-# line 176
-EVT_RENDER_EVENT_VALUES = 0
-EVT_RENDER_EVENT_XML    = 1
-EVT_RENDER_BOOK_MARK    = 2
+class Evtapi(Winapi):
+    __new__ = super(WinapiFunctions).__new__
 
-wevtapi     = WinDLL(name='wevtapi',    use_last_error=True)
+    # winevt.h line 156
+    EVT_QUERY_CHANNEL_PATH          = 0x1
+    EVT_QUERY_FILE_PATH             = 0x2
+    EVT_QUERY_FORWARD_DIRECTION     = 0x100
+    EVT_QUERY_REVERSE_DIRECTION     = 0x200
+    EVT_QUERY_TOLERATE_QUERY_ERRORS = 0x1000
+    # line 176
+    EVT_RENDER_EVENT_VALUES = 0
+    EVT_RENDER_EVENT_XML    = 1
+    EVT_RENDER_BOOK_MARK    = 2
 
-EVT_HANDLE                          = HANDLE
-EvtQuery                            = wevtapi.EvtQuery
-EvtQuery.argtypes                   = [EVT_HANDLE, LPCWSTR, LPCWSTR, DWORD]
-EvtQuery.restype                    = HANDLE
+    wevtapi     = WinDLL(name='wevtapi',    use_last_error=True)
 
-EvtNext                             = wevtapi.EvtNext
-EvtNext.argtypes                    = [EVT_HANDLE, DWORD, POINTER(EVT_HANDLE), DWORD, DWORD, POINTER(DWORD)]
-EvtNext.restype                     = BOOL
+    EVT_HANDLE                          = HANDLE
+    EvtQuery                            = wevtapi.EvtQuery
+    EvtQuery.argtypes                   = [EVT_HANDLE, LPCWSTR, LPCWSTR, DWORD]
+    EvtQuery.restype                    = HANDLE
 
-EvtRender                           = wevtapi.EvtRender
-EvtRender.argtypes                  = [EVT_HANDLE, EVT_HANDLE, DWORD, DWORD, LPVOID, POINTER(DWORD), POINTER(DWORD)]
-EvtRender.restype                   = BOOL
+    EvtNext                             = wevtapi.EvtNext
+    EvtNext.argtypes                    = [EVT_HANDLE, DWORD, POINTER(EVT_HANDLE), DWORD, DWORD, POINTER(DWORD)]
+    EvtNext.restype                     = BOOL
 
-EvtClose                            = wevtapi.EvtClose
-EvtClose.argtypes                   = [EVT_HANDLE]
-EvtClose.restype                    = BOOL
+    EvtRender                           = wevtapi.EvtRender
+    EvtRender.argtypes                  = [EVT_HANDLE, EVT_HANDLE, DWORD, DWORD, LPVOID, POINTER(DWORD), POINTER(DWORD)]
+    EvtRender.restype                   = BOOL
 
-class QueryEvt(Handle_):
-    _func       = EvtQuery
-    _exitfunc   = EvtClose
+    EvtClose                            = wevtapi.EvtClose
+    EvtClose.argtypes                   = [EVT_HANDLE]
+    EvtClose.restype                    = BOOL
 
-    def __enter__(self) -> EVT_HANDLE:
+    def _enum_events(self, hevent):
+        event = self.EVT_HANDLE()
+        returned = DWORD(0)
+        while self.EvtNext(hevent, 1, byref(event), self.INFINITE, 0, byref(returned)):
+            if event == self.INVALID_HANDLE_VALUE:
+                self.report(f"Invalid handle: 0x{event}", raise_=False)
+                continue
+
+            buffer_size = DWORD(0)
+            buffer_used = DWORD(0)
+            property_count = DWORD(0)
+            rendered_content = None
+
+            self.EvtRender(
+                None,
+                event,
+                self.EVT_RENDER_EVENT_XML,
+                buffer_size,
+                rendered_content,
+                byref(buffer_used),
+                byref(property_count)
+            )
+            if self.GetLastError() == self.ERROR_SUCCESS:
+                yield rendered_content
+                continue
+
+            buffer_size = buffer_used.value
+            rendered_content = create_unicode_buffer(buffer_size)
+            if not rendered_content:
+                self.report("malloc failed.", raise_=False)
+                continue
+
+            if not self.EvtRender(
+                    None,
+                    event,
+                    self.EVT_RENDER_EVENT_XML,
+                    buffer_size,
+                    rendered_content,
+                    byref(buffer_used),
+                    byref(property_count)
+            ):
+                self.report(f"EvtRender failed with {self.GetLastError()}", raise_=False)
+                continue
+
+            if self.GetLastError() == self.ERROR_SUCCESS:
+                yield rendered_content.value
+
+            self.EvtClose(event)
+
+class QueryEvt(Handle_, Evtapi):
+    _func       = Evtapi.EvtQuery
+    _exitfunc   = Evtapi.EvtClose
+
+    def __enter__(self) -> Evtapi.EVT_HANDLE:
         return self._handle
 
     @staticmethod
     def __get_init_args__():
         query = "Event/System[EventID=4688]"
-        return None, "Security", query, EVT_QUERY_REVERSE_DIRECTION | EVT_QUERY_CHANNEL_PATH
+        return None, "Security", query, Evtapi.EVT_QUERY_REVERSE_DIRECTION | Evtapi.EVT_QUERY_CHANNEL_PATH
 
 class EvtData:
     def __init__(self, data: dict, dtime: datetime):
@@ -141,56 +193,7 @@ class EventTree:
 def evt_query() -> QueryEvt:
     return QueryEvt()
 
-def _enum_events(hevent):
-    event = EVT_HANDLE()
-    returned = DWORD(0)
-    while EvtNext(hevent, 1, byref(event), INFINITE, 0, byref(returned)):
-        if event == INVALID_HANDLE_VALUE:
-            report(f"Invalid handle: 0x{event}", raise_=False)
-            continue
-
-        buffer_size = DWORD(0)
-        buffer_used = DWORD(0)
-        property_count = DWORD(0)
-        rendered_content = None
-
-        EvtRender(
-            None,
-            event,
-            EVT_RENDER_EVENT_XML,
-            buffer_size,
-            rendered_content,
-            byref(buffer_used),
-            byref(property_count)
-        )
-        if GetLastError() == ERROR_SUCCESS:
-            yield rendered_content
-            continue
-
-        buffer_size = buffer_used.value
-        rendered_content = create_unicode_buffer(buffer_size)
-        if not rendered_content:
-            report("malloc failed.", raise_=False)
-            continue
-
-        if not EvtRender(
-            None,
-            event,
-            EVT_RENDER_EVENT_XML,
-            buffer_size,
-            rendered_content,
-            byref(buffer_used),
-            byref(property_count)
-        ):
-            report(f"EvtRender failed with {GetLastError()}", raise_=False)
-            continue
-
-        if GetLastError() == ERROR_SUCCESS:
-            yield rendered_content.value
-
-        EvtClose(event)
-
-class ProcessManager:
+class ProcessManager(Evtapi):
     _instance = None
     _lock = threading.Lock()
 
@@ -203,6 +206,7 @@ class ProcessManager:
     def __init__(self, pid: int):
         if hasattr(self, '_initialized') and self._initialized:
             return
+        super().__init__()
         self.mainpid        = pid
         self.datas          = []
         self.evttree        = EventTree()
@@ -229,10 +233,10 @@ class ProcessManager:
 
     async def grab_pids(self):
         try:
-            if not IsUserAnAdmin():
-                report("Currently not running in administrator mode", statuscode=GetLastError())
+            if not self.IsUserAnAdmin():
+                self.report("Currently not running in administrator mode", statuscode=self.GetLastError())
             with evt_query() as hevent:
-                for content in _enum_events(hevent):
+                for content in self._enum_events(hevent):
                     data = self.evttree.parse_event(content)
                     with self.lock:
                         self.datas.append(data)
@@ -254,9 +258,9 @@ class ProcessManager:
             for node in evtiter:
                 if node.data != data:
                     continue
-                if is_running(node.data.process_id, data.process_id):
+                if self.is_running(node.data.process_id, data.process_id):
                     break
-                cmdline = get_cmdline(data.process_id)
+                cmdline = self.get_cmdline(data.process_id)
                 if data.process_name not in cmdline:
                     continue
                 node.add_children(data)
@@ -273,7 +277,7 @@ class ProcessManager:
         with self.lock:
             evtiter = self.evttree.post_order_traversal(self.evttree.root)
             for node in evtiter:
-                terminate_process(node.data.process_id)
+                self.terminate_process(node.data.process_id)
             self.datas = []
             self.evttree = EventTree()
 

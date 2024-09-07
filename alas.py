@@ -162,17 +162,17 @@ class AzurLaneAutoScript:
             with open(f'{folder}/log.txt', 'w', encoding='utf-8') as f:
                 f.writelines(lines)
 
-    def emulator_check(self):
+    def check(self):
         from module.device.platform import Platform
         return Platform(self.config).emulator_check()
 
-    def reboot(self):
+    def reboot(self, log=True):
         from module.device.platform import Platform
-        logger.warning('Emulator is not running')
+        if log:
+            logger.warning('Emulator is not running')
         p = Platform(self.config)
         p.emulator_stop()
         p.emulator_start()
-        self.run('start')
         del_cached_property(self, 'config')
 
     def restart(self):
@@ -479,13 +479,13 @@ class AzurLaneAutoScript:
             buffertime: int         = self.config.Optimization_ProcessBufferTime
             if (
                 method == 'stop_emulator' and
-                self.device.emulator_check() and
+                self.check() and
                 remainingtime <= buffertime
             ):
                 method = self.config.Optimization_BufferMethod
                 logger.info(
                     f"The time to next task `{task.command}` is {remainingtime:.2f} minutes, "
-                    f"less than {buffertime} minutes, fallback to {method}"
+                    f"less than {buffertime} minutes, fallback to \"{method}\""
                 )
 
             if method == 'close_game':
@@ -522,11 +522,12 @@ class AzurLaneAutoScript:
                     del_cached_property(self, 'config')
                     method: str = self.config.Optimization_WhenTaskQueueEmpty
                     if (
-                        not self.device.emulator_check() and
+                        not self.check() and
                         method != 'stop_emulator'
                     ):
-                        self.run('reboot')
+                        self.run('reboot', True)
                     continue
+                self.run('reboot', True)
             else:
                 logger.warning(f'Invalid Optimization_WhenTaskQueueEmpty: {method}, fallback to stay_there')
                 release_resources()
@@ -562,8 +563,8 @@ class AzurLaneAutoScript:
                 logger.info('Server or network is recovered. Restart game client')
                 self.config.task_call('Restart')
             # Reboot emulator
-            if not self.emulator_check():
-                self.reboot()
+            if not self.check():
+                self.run('reboot', True)
             # Init device and change server
             _ = self.device
             # Get task

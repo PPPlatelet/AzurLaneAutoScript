@@ -3,48 +3,46 @@ if not IS_WINDOWS:
     raise OSError("Current environment isn't Windows")
 
 import re
-from typing import Generator
+from typing import Generator, Iterable
+from shlex import split as split_
+from os.path import dirname
 
 from ctypes import addressof, create_unicode_buffer, wstring_at
 
-from module.device.platform.emulator_windows import Emulator, EmulatorManager
-from module.device.platform.platform_base import PlatformBase
+from module.device.platform.emulator_windows import Emulator
 from module.device.platform.winapi import *
 from module.base.timer import Timer
 from module.logger import logger
 
-class Winapi(PlatformBase, WinapiFunctions, EmulatorManager):
-    process = None
+class Winapi(WinapiFunctions):
+    def close_handle(self, handles: Iterable[Any], *args, fclose=None):
+        from itertools import chain
 
-    def __new__(cls, *args, **kwargs):
-        instance = super(WinapiConstants, cls).__new__(cls)
-        return instance
-
-    def close_handle(self, *args, fclose=None):
         if fclose is None:
             fclose = self.CloseHandle
+
         count = 0
-        for handle in args:
-            if isinstance(handle, int):
-                handle = HANDLE(handle)
-            if isinstance(handle, c_void_p):
-                fclose(handle)
-                count += 1
-                logger.info(f"Closed handle: {handle}")
+        for handle in iter(chain(handles, args)):
+            if not isinstance(handle, (int, c_void_p)):
+                self.report(
+                    f"Expected a int or c_void_p, but got {type(handle).__name__}",
+                    report_status=False,
+                    log_level=30,
+                    raise_exc=False
+                )
                 continue
-            self.report(
-                f"Expected a int or c_void_p, but got {type(handle).__name__}",
-                reportstatus=False,
-                level=30,
-                raise_=False,
-            )
+            fclose(handle)
+            count += 1
+            logger.info(f"Closed handle: {handle}")
+
         if not count:
             self.report(
-                f"All handles are unavailable, please check the running environment",
-                reportstatus=False,
-                raise_=False
-            )
+            f"All handles are unavailable, please check the running environment",
+            report_status=False,
+            raise_exc=False,
+        )
             return False
+
         return True
 
     def __yield_entries(self, entry32, snapshot, func):
@@ -53,9 +51,9 @@ class Winapi(PlatformBase, WinapiFunctions, EmulatorManager):
             if func(snapshot, byref(entry32)):
                 continue
             # Finished querying
-            errorcode = self.GetLastError()
-            assert errorcode == self.ERROR_NO_MORE_FILES, self.report(f"{func.__name__} failed", statuscode=errorcode)
-            self.report("Finished querying.", statuscode=errorcode, uselog=False, exception=IterationFinished)
+            errcode = self.GetLastError()
+            assert errcode == self.ERROR_NO_MORE_FILES, self.report(f"{func.__name__} failed", status_code=errcode)
+            self.report("Finished querying.", use_log=False, exc_type=IterationFinished)
 
     def _enum_processes(self) -> Generator[PROCESSENTRY32W, None, None]:
         lppe32 = PROCESSENTRY32W(sizeof(PROCESSENTRY32W))
@@ -73,7 +71,7 @@ class Winapi(PlatformBase, WinapiFunctions, EmulatorManager):
         hwnd = HWND(self.GetForegroundWindow())
         wp = WINDOWPLACEMENT(sizeof(WINDOWPLACEMENT))
         if not self.GetWindowPlacement(hwnd, byref(wp)):
-            self.report("Failed to get windowplacement", level=30, raise_=False)
+            self.report("Failed to get windowplacement", log_level=30, raise_exc=False)
             wp = None
         return hwnd, wp
 
@@ -115,46 +113,21 @@ class Winapi(PlatformBase, WinapiFunctions, EmulatorManager):
 
     def execute(self, command, silentstart, start):
         # TODO:Create Process with non-administrator privileges
-        from shlex import split
-        from os.path import dirname
         focusedwindow               = self.get_focused_window()
-        if start:
+        if start and silentstart:
             refresh_thread = threading.Thread(target=self.refresh_window, name='Refresh-Thread', args=(focusedwindow,))
             refresh_thread.start()
 
-        """
-        chandle = HANDLE()
-        OpenProcessToken(GetCurrentProcess(), TOKEN_DUPLICATE, byref(chandle))
-        hToken = HANDLE()
-        DuplicateTokenEx(
-            chandle,
-            TOKEN_DUPLICATE | TOKEN_QUERY, TOKEN_ADJUST_SESSIONID,
-            None,
-            SECURITY_DELEGATION,
-            TOKEN_PRIMARY,
-            byref(hToken)
-        )
-        token_groups = TOKEN_GROUPS()
-        token_groups.GroupCount = 1
-        token_groups.Groups[0].Attributes = SE_GROUP_USE_FOR_DENY_ONLY
-        AdjustTokenGroups(
-            hToken,
-            True,
-            byref(token_groups),
-            0,
-            None,
-            None
-        )
-        """
-
-        # dwLogonFlags = DWORD(0)
-        lpApplicationName           = split(command)[0]
+        lpApplicationName           = split_(command)[0]
         lpCommandLine               = command
         lpProcessAttributes         = None
         lpThreadAttributes          = None
         bInheritHandles             = False
         dwCreationFlags             = (
-            self.DETACHED_PROCESS |
+            self.CREATE_NEW_CONSOLE |
+            self.NORMAL_PRIORITY_CLASS |
+            self.CREATE_NEW_PROCESS_GROUP |
+            self.CREATE_DEFAULT_ERROR_MODE |
             self.CREATE_UNICODE_ENVIRONMENT
         )
         lpEnvironment               = None
@@ -166,7 +139,25 @@ class Winapi(PlatformBase, WinapiFunctions, EmulatorManager):
         )
         lpProcessInformation        = PROCESS_INFORMATION()
 
-        assert self.CreateProcessW(
+        TokenHandle = HANDLE()
+        assert self.OpenProcessToken(
+            self.GetCurrentProcess(),
+            self.TOKEN_DUPLICATE | self.TOKEN_QUERY,
+            byref(TokenHandle)
+        ), self.report("Failed to open process token", exc_type=EmulatorLaunchFailedError)
+
+        DuplicateTokenHandle = HANDLE()
+        assert self.DuplicateTokenEx(
+            TokenHandle,
+            self.MAXIMUM_ALLOWED,
+            None,
+            self.SECURITY_IMPERSONATION,
+            self.TOKEN_PRIMARY,
+            byref(DuplicateTokenHandle)
+        ), self.report("Failed to duplicate token", exc_type=EmulatorLaunchFailedError)
+
+        assert self.CreateProcessAsUserW(
+            DuplicateTokenHandle,
             lpApplicationName,
             lpCommandLine,
             lpProcessAttributes,
@@ -177,11 +168,13 @@ class Winapi(PlatformBase, WinapiFunctions, EmulatorManager):
             lpCurrentDirectory,
             byref(lpStartupInfo),
             byref(lpProcessInformation)
-        ),  self.report("Failed to start emulator", exception=EmulatorLaunchFailedError)
+        ),  self.report("Failed to start emulator", exc_type=EmulatorLaunchFailedError)
 
         if not start:
-            self.close_handle(*lpProcessInformation[:2])
+            self.close_handle(lpProcessInformation[:2])
             lpProcessInformation = None
+
+        self.close_handle((), TokenHandle, DuplicateTokenHandle)
 
         return lpProcessInformation, focusedwindow
 
@@ -207,7 +200,7 @@ class Winapi(PlatformBase, WinapiFunctions, EmulatorManager):
             logger.error("Hwnd not found!")
             logger.error("1.Perhaps emulator has been killed.")
             logger.error("2.Environment has something wrong. Please check the running environment.")
-            self.report("Hwnd not found", exception=HwndNotFoundError)
+            self.report("Hwnd not found", exc_type=HwndNotFoundError)
         return hwnds
 
     def get_cmdline(self, pid):
@@ -218,22 +211,22 @@ class Winapi(PlatformBase, WinapiFunctions, EmulatorManager):
                 returnlength = ULONG(sizeof(pbi))
                 status = self.NtQueryInformationProcess(hProcess, 0, byref(pbi), sizeof(pbi), byref(returnlength))
                 assert status == self.STATUS_SUCCESS, \
-                    self.report(f"NtQueryInformationProcess failed. Status: 0x{status:08x}", level=30)
+                    self.report(f"NtQueryInformationProcess failed. Status: 0x{status:08x}", log_level=30)
 
                 # Read PEB
                 peb = PEB()
                 assert self.ReadProcessMemory(hProcess, pbi.PebBaseAddress, byref(peb), sizeof(peb), None), \
-                    self.report("Failed to read PEB", level=30)
+                    self.report("Failed to read PEB", log_level=30)
 
                 # Read process parameters
                 upp = RTL_USER_PROCESS_PARAMETERS()
                 assert self.ReadProcessMemory(hProcess, peb.ProcessParameters, byref(upp), sizeof(upp), None), \
-                    self.report("Failed to read process parameters", level=30)
+                    self.report("Failed to read process parameters", log_level=30)
 
                 # Read command line
                 commandLine = create_unicode_buffer(upp.CommandLine.Length // 2)
                 assert self.ReadProcessMemory(hProcess, upp.CommandLine.Buffer, commandLine, upp.CommandLine.Length, None), \
-                    self.report("Failed to read command line", level=30)
+                    self.report("Failed to read command line", log_level=30)
 
                 cmdline = wstring_at(addressof(commandLine), len(commandLine))
         except OSError:
@@ -312,12 +305,12 @@ class Winapi(PlatformBase, WinapiFunctions, EmulatorManager):
         try:
             hProcess = self.OpenProcess(self.PROCESS_ALL_ACCESS, False, pid)
             assert hProcess is not None, \
-                self.report("OpenProcess failed", level=30)
+                self.report("OpenProcess failed", log_level=30)
 
             hThread = self.OpenThread(self.THREAD_ALL_ACCESS, False, tid)
             if hThread is None:
                 self.CloseHandle(hProcess)
-                self.report("OpenThread failed", level=30)
+                self.report("OpenThread failed", log_level=30)
 
             pi.hProcess, pi.hThread = hProcess, hThread
         except OSError as e:
@@ -361,8 +354,8 @@ class Winapi(PlatformBase, WinapiFunctions, EmulatorManager):
         if not count:
             self.report(
                 "All hwnds are unavailable, please check the running environment",
-                reportstatus=False,
-                raise_=False
+                report_status=False,
+                raise_exc=False
             )
             return False
         return True
@@ -375,7 +368,7 @@ class Winapi(PlatformBase, WinapiFunctions, EmulatorManager):
                 returnlength = ULONG(sizeof(pbi))
                 status = self.NtQueryInformationProcess(hProcess, 0, byref(pbi), returnlength, byref(returnlength))
                 assert status == self.STATUS_SUCCESS, \
-                    self.report(f"NtQueryInformationProcess failed. Status: 0x{status:x}", level=30)
+                    self.report(f"NtQueryInformationProcess failed. Status: 0x{status:x}", log_level=30)
         except OSError:
             return -1
         return pbi.InheritedFromUniqueProcessId
@@ -385,7 +378,7 @@ class Winapi(PlatformBase, WinapiFunctions, EmulatorManager):
             with open_process(self.PROCESS_QUERY_INFORMATION, pid) as hProcess:
                 exit_code = ULONG()
                 assert self.GetExitCodeProcess(hProcess, byref(exit_code)), \
-                    self.report("Failed to get Exit code", level=30)
+                    self.report("Failed to get Exit code", log_level=30)
         except OSError:
             return -1
         return exit_code.value
@@ -397,31 +390,89 @@ class Winapi(PlatformBase, WinapiFunctions, EmulatorManager):
             return False
         return True
 
-    def emulator_check(self) -> bool:
-        try:
-            if not isinstance(self.process, PROCESS_INFORMATION):
-                self.process = self.get_process(self.emulator_instance)
-                return True
-            cmdline = self.get_cmdline(self.process[2])
-            if self.emulator_instance.path.lower() in cmdline.lower():
-                return True
-            if not all(handle is not None for handle in self.process[:2]):
-                self.close_handle(*self.process[:2])
-                self.process = None
-            raise ProcessLookupError
-        except (IterationFinished, IndexError):
+    def is_user_admin(self):
+        nt_authority    = (c_byte * 6)
+        nt_authority[:] = 0,0,0,0,0,self.SECURITY_NT_AUTHORITY.value
+        admins_group    = c_void_p()
+
+        assert self.AllocateAndInitializeSid(
+            byref(nt_authority),
+            2,
+            self.SECURITY_BUILTIN_DOMAIN_RID,
+            self.DOMAIN_ALIAS_RID_ADMINS,
+            0, 0, 0, 0, 0, 0,
+            byref(admins_group)
+        ), self.report("Failed to allocate and initialize SID")
+
+        is_admin = BOOL()
+        if not self.CheckTokenMembership(None, admins_group, byref(is_admin)):
+            self.report("Failed to check token membership", log_level=30, raise_exc=False)
             return False
-        except ProcessLookupError:
-            return self.emulator_check
-        except OSError as e:
-            logger.error(e)
-            raise e
-        except Exception as e:
-            logger.exception(e)
-            raise e
+
+        self.FreeSid(admins_group)
+
+        return is_admin.value == 1
+
+    def set_privilege(self, hToken, lpszPrivilege, bEnablePrivilege):
+        tp = TOKEN_PRIVILEGES()
+        luid = LUID()
+
+        if not self.LookupPrivilegeValueW(None, lpszPrivilege, byref(luid)):
+            self.report("Failed to lookup privilege value", log_level=30, raise_exc=False)
+            return
+
+        tp.PrivilegeCount = 1
+        tp.Privileges[0].Luid = luid
+
+        tp.Privileges[0].Attributes = (self.SE_PRIVILEGE_ENABLED if bEnablePrivilege else 0)
+
+        assert self.AdjustTokenPrivileges(hToken, False, byref(tp), sizeof(tp), None, None), \
+            self.report("Failed to adjust token privileges")
+
+    def create_process_with_token(
+            self,
+            hToken,
+            dwLogonFlags            = 1,
+            lpApplicationName       = None,
+            lpCommandLine           = 'notepad.exe',
+            dwCreationFlags         = 0,
+            lpEnvironment           = None,
+            lpCurrentDirectory      = None,
+            lpStartupInfo           = STARTUPINFOW(),
+            lpProcessInformation    = PROCESS_INFORMATION()
+    ):
+        assert self.CreateProcessWithTokenW(
+            hToken,
+            dwLogonFlags,
+            lpApplicationName,
+            lpCommandLine,
+            dwCreationFlags,
+            lpEnvironment,
+            lpCurrentDirectory,
+            byref(lpStartupInfo),
+            byref(lpProcessInformation)
+        ), self.report("Failed to create process with token", exc_type=EmulatorLaunchFailedError)
+        return lpProcessInformation
+
+    def create_process(self, **kwargs):
+        lpStartupInfo           = kwargs.get('lpStartupInfo',           STARTUPINFOW())
+        lpProcessInformation    = kwargs.get('lpProcessInformation',    PROCESS_INFORMATION())
+        assert self.CreateProcessW(
+            kwargs.get('lpApplicationName',     None),
+            kwargs.get('lpCommandLine',         'notepad.exe'),
+            kwargs.get('lpProcessAttributes',   None),
+            kwargs.get('lpThreadAttributes',    None),
+            kwargs.get('bInheritHandles',       False),
+            kwargs.get('dwCreationFlags',       0),
+            kwargs.get('lpEnvironment',         None),
+            kwargs.get('lpCurrentDirectory',    None),
+            byref(lpStartupInfo),
+            byref(lpProcessInformation)
+        ), self.report("Failed to create process", exc_type=EmulatorLaunchFailedError)
+        return lpProcessInformation
 
 if __name__ == '__main__':
-    c = hex_or_normalize_path('"E:\\Program Files\\Netease\\MuMu Player 12\\shell\\MuMuPlayer.exe" -v 2')
-    p, fw = Winapi().execute(c, False, True)
+    c = hex_or_normalize_path(r'"D:\Program Files\NetEase\MuMu Player 12\shell\MuMuPlayer.exe" -v 2')
+    p, fw = Winapi('alas').execute(c, False, True)
     logger.info(p)
     logger.info(fw)

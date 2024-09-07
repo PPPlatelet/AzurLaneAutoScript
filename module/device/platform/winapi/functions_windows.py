@@ -3,17 +3,18 @@ import time
 from functools import wraps
 from typing import Any, Callable, Optional, Union
 
-from ctypes import POINTER, WINFUNCTYPE, WinDLL, c_size_t
+from ctypes import POINTER, WINFUNCTYPE, WinDLL, c_size_t, c_void_p
 from ctypes.wintypes import \
     HANDLE, DWORD, HWND, BOOL, INT, UINT, \
     LONG, ULONG, LPWSTR, LPCWSTR, \
-    LPVOID, LPCVOID, LPARAM, PULONG
+    LPVOID, LPCVOID, LPARAM, PULONG, \
+    BYTE, PDWORD, PBOOL, PHANDLE
 
 from module.device.platform.winapi import WinapiConstants
 from module.device.platform.winapi.structures_windows import \
     SECURITY_ATTRIBUTES, STARTUPINFOW, WINDOWPLACEMENT, \
     PROCESS_INFORMATION, PROCESSENTRY32W, THREADENTRY32, \
-    FILETIME, TOKEN_GROUPS
+    FILETIME, SID_IDENTIFIER_AUTHORITY, SID, LUID, TOKEN_PRIVILEGES
 from module.logger import logger
 
 class WinapiFunctions(WinapiConstants):
@@ -38,24 +39,51 @@ class WinapiFunctions(WinapiConstants):
         POINTER(SECURITY_ATTRIBUTES),
         ULONG,
         ULONG,
-        POINTER(HANDLE)
+        PHANDLE
     ]
     DuplicateTokenEx.restype            = LONG
+
+    AllocateAndInitializeSid            = advapi32.AllocateAndInitializeSid
+    AllocateAndInitializeSid.argtypes   = [
+        POINTER(SID_IDENTIFIER_AUTHORITY),
+        BYTE,
+        DWORD,
+        DWORD,
+        DWORD,
+        DWORD,
+        DWORD,
+        DWORD,
+        DWORD,
+        DWORD,
+        PBOOL
+    ]
+
+    CheckTokenMembership                = advapi32.CheckTokenMembership
+    CheckTokenMembership.argtypes       = [HANDLE, POINTER(SID), PBOOL]
+    CheckTokenMembership.restype        = BOOL
+
+    FreeSid                             = advapi32.FreeSid
+    FreeSid.argtypes                    = [POINTER(SID)]
+    FreeSid.restype                     = LPVOID
+
+    AdjustTokenPrivileges               = advapi32.AdjustTokenPrivileges
+    AdjustTokenPrivileges.argtypes      = [
+        HANDLE,
+        BOOL,
+        POINTER(TOKEN_PRIVILEGES),
+        DWORD,
+        POINTER(TOKEN_PRIVILEGES),
+        PDWORD
+    ]
+    AdjustTokenPrivileges.restype       = BOOL
 
     GetCurrentProcess                   = kernel32.GetCurrentProcess
     GetCurrentProcess.argtypes          = []
     GetCurrentProcess.restype           = HANDLE
 
-    AdjustTokenGroups                   = advapi32.AdjustTokenGroups
-    AdjustTokenGroups.argtypes          = [
-        HANDLE,
-        BOOL,
-        POINTER(TOKEN_GROUPS),
-        DWORD,
-        POINTER(TOKEN_GROUPS),
-        POINTER(DWORD),
-    ]
-    AdjustTokenGroups.restype           = BOOL
+    LookupPrivilegeValueW               = advapi32.LookupPrivilegeValueW
+    LookupPrivilegeValueW.argtypes      = [LPCWSTR, LPCWSTR, POINTER(LUID)]
+    LookupPrivilegeValueW.restype       = BOOL
 
     CreateProcessWithTokenW             = advapi32.CreateProcessWithTokenW
     CreateProcessWithTokenW.argtypes    = [
@@ -102,6 +130,22 @@ class WinapiFunctions(WinapiConstants):
     ]
     CreateProcessW.restype              = BOOL
 
+    CreateProcessWithLogonW             = advapi32.CreateProcessWithLogonW
+    CreateProcessWithLogonW.argtypes    = [
+        LPCWSTR,                        # lpUsername
+        LPCWSTR,                        # lpDomain
+        LPCWSTR,                        # lpPassword
+        DWORD,                          # dwLogonFlags
+        LPCWSTR,                        # lpApplicationName
+        LPWSTR,                         # lpCommandLine
+        DWORD,                          # dwCreationFlags
+        LPVOID,                         # lpEnvironment
+        LPCWSTR,                        # lpCurrentDirectory
+        POINTER(STARTUPINFOW),          # lpStartupInfo
+        POINTER(PROCESS_INFORMATION)    # lpProcessInformation
+    ]
+    CreateProcessWithLogonW.restype     = BOOL
+
     TerminateProcess                    = kernel32.TerminateProcess
     TerminateProcess.argtypes           = [HANDLE, UINT]
     TerminateProcess.restype            = BOOL
@@ -133,7 +177,7 @@ class WinapiFunctions(WinapiConstants):
     EnumWindows.argtypes                = [EnumWindowsProc, LPARAM]
     EnumWindows.restype                 = BOOL
     GetWindowThreadProcessId            = user32.GetWindowThreadProcessId
-    GetWindowThreadProcessId.argtypes   = [HWND, POINTER(DWORD)]
+    GetWindowThreadProcessId.argtypes   = [HWND, PDWORD]
     GetWindowThreadProcessId.restype    = DWORD
 
     OpenProcess                         = kernel32.OpenProcess
@@ -188,7 +232,7 @@ class WinapiFunctions(WinapiConstants):
     GetThreadTimes.restype              = BOOL
 
     GetExitCodeProcess                  = kernel32.GetExitCodeProcess
-    GetExitCodeProcess.argtypes         = [HANDLE, POINTER(DWORD)]
+    GetExitCodeProcess.argtypes         = [HANDLE, PDWORD]
     GetExitCodeProcess.restype          = BOOL
 
     GetLastError                        = kernel32.GetLastError
@@ -196,25 +240,27 @@ class WinapiFunctions(WinapiConstants):
     GetLastError.restype                = DWORD
 
     SIZE_T                              = c_size_t
+    PSIZE_T                             = POINTER(SIZE_T)
     NTSTATUS                            = LONG
     ReadProcessMemory                   = kernel32.ReadProcessMemory
-    ReadProcessMemory.argtypes          = [HANDLE, LPCVOID, LPVOID, SIZE_T, POINTER(SIZE_T)]
+    ReadProcessMemory.argtypes          = [HANDLE, LPCVOID, LPVOID, SIZE_T, PSIZE_T]
     ReadProcessMemory.restype           = BOOL
+
     NtQueryInformationProcess           = ntdll.NtQueryInformationProcess
     NtQueryInformationProcess.argtypes  = [HANDLE, INT, LPVOID, ULONG, PULONG]
     NtQueryInformationProcess.restype   = NTSTATUS
 
     def report(
-        self,
-        msg: str = '',
-        *args: tuple,
-        reportstatus: bool = True,
-        statuscode: int = -1,
-        uselog: bool = True,
-        level: int = 40,
-        raise_: bool = True,
-        exception: type = OSError,
-        **kwargs: dict
+            self,
+            msg: str            = '',
+            *args: tuple,
+            report_status: bool = True,
+            status_code: int    = -1,
+            use_log: bool       = True,
+            log_level: int      = 40,
+            raise_exc: bool     = True,
+            exc_type: type      = OSError,
+            **kwargs: dict
     ) -> None:
         """
         Report any exception.
@@ -222,31 +268,31 @@ class WinapiFunctions(WinapiConstants):
         Args:
             msg (str): The message to report.
             args (tuple): Additional arguments.
-            reportstatus (bool): Whether to report the status code.
-            statuscode (int): The status code to report.
-            uselog (bool): Whether to log the message.
-            level (int): Logging level
-            raise_ (bool): Flag indicating whether to raise an exception.
-            exception (Type[Exception]): Exception class to raise.
+            report_status (bool): Whether to report the status code.
+            status_code (int): The status code to report.
+            use_log (bool): Whether to log the message.
+            log_level (int): Logging level
+            raise_exc (bool): Flag indicating whether to raise an exception.
+            exc_type (Type[Exception]): Exception class to raise.
             kwargs (dict): Additional keyword arguments.
 
         Raises:
-            Optional[OSError]: The specified exception class if raise_ is True.
+            Optional[OSError]: The specified exception class if raise_exc is True.
         """
         message: list = [msg]
-        if reportstatus:
-            if statuscode == -1:
-                statuscode = self.GetLastError()
-            message.append(f"Status code: 0x{statuscode:08x}")
+        if report_status:
+            if status_code == -1:
+                status_code = self.GetLastError()
+            message.append(f"Status code: 0x{status_code:08x}")
         if args:
             message.append(f"args: {' '.join(map(str, args))}")
         if kwargs:
             message.append(f"kwargs: {kwargs}")
         message: str = '. '.join(message)
-        if uselog:
-            logger.log(level, message)
-        if raise_:
-            raise exception(message)
+        if use_log:
+            logger.log(log_level, message)
+        if raise_exc:
+            raise exc_type(message)
 
 class Handle_(metaclass=ABCMeta):
     """
@@ -254,17 +300,17 @@ class Handle_(metaclass=ABCMeta):
     Please override these functions if needed.
     """
     functions = WinapiFunctions()
-    _handle:    Optional[HANDLE]
-    _func:      Callable[..., HANDLE]
-    _exitfunc:  Callable[[HANDLE], None]
+    _handle:    Optional[c_void_p]
+    _func:      Callable[..., c_void_p]
+    _exitfunc:  Callable[[c_void_p], None]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         if hasattr(self, '_func'):
             self._handle = HANDLE(self._func(*self.__get_init_args__(*args, **kwargs)))
             assert self, self.functions.report(
                 f"{self._func.__name__} failed.",
-                uselog=kwargs.get('uselog', True),
-                raise_=kwargs.get("raise_", True)
+                use_log=kwargs.get('use_log', True),
+                raise_exc=kwargs.get("raise_exc", True)
             )
 
     def __enter__(self) -> HANDLE:
@@ -280,7 +326,6 @@ class Handle_(metaclass=ABCMeta):
 
     @abstractmethod
     def __get_init_args__(self, *args: Any, **kwargs: Any) -> tuple: ...
-
 
     def _is_invalid_handle(self) -> bool:
         return self._handle.value is None
@@ -318,7 +363,16 @@ class CreateSnapshot(Handle_):
     def _is_invalid_handle(self) -> bool:
         return self._handle == self.functions.INVALID_HANDLE_VALUE
 
-def hex_or_normalize_path(input_str) -> Union[int, str]:
+def open_process(access: int, pid: int, uselog: bool = False, raise_: bool = True) -> ProcessHandle:
+    return ProcessHandle(access, pid, uselog=uselog, raise_=raise_)
+
+def open_thread(access: int, tid: int, uselog: bool = False, raise_: bool = True) -> ThreadHandle:
+    return ThreadHandle(access, tid, uselog=uselog, raise_=raise_)
+
+def create_snapshot(access: int, uselog: bool = False, raise_: bool = True) -> CreateSnapshot:
+    return CreateSnapshot(access, uselog=uselog, raise_=raise_)
+
+def hex_or_normalize_path(input_str: str) -> Union[int, str]:
     """
     Args:
         input_str (str):
@@ -330,15 +384,6 @@ def hex_or_normalize_path(input_str) -> Union[int, str]:
         return int(input_str, 16)
     except ValueError:
         return input_str.replace(r"\\", "/").replace("\\", "/").replace('\"', '"')
-
-def open_process(access: int, pid: int, uselog: bool = False, raise_: bool = True) -> ProcessHandle:
-    return ProcessHandle(access, pid, uselog=uselog, raise_=raise_)
-
-def open_thread(access: int, tid: int, uselog: bool = False, raise_: bool = True) -> ThreadHandle:
-    return ThreadHandle(access, tid, uselog=uselog, raise_=raise_)
-
-def create_snapshot(access: int, uselog: bool = False, raise_: bool = True) -> CreateSnapshot:
-    return CreateSnapshot(access, uselog=uselog, raise_=raise_)
 
 def get_func_path(func: Callable[..., Any]) -> str:
     """
@@ -368,7 +413,7 @@ def get_func_path(func: Callable[..., Any]) -> str:
     funcpath: str = '.'.join(funcpath)
     return funcpath
 
-def timer(timeout=1):
+def timer(timeout: int = 1):
     import logging
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
     executor = ThreadPoolExecutor(max_workers=1)

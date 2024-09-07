@@ -1,4 +1,4 @@
-from re import search
+from re import search, fullmatch
 
 from ctypes import \
     POINTER, sizeof, byref, Structure as _Structure, \
@@ -116,28 +116,20 @@ class Structure(_Structure):
             raise TypeError("Invalid argument type")
 
     def __format__(self, format_spec):
+        def format_fields(format_spec, prefix):
+            values = [getattr(self, name) for name in self.field_name]
+            return ', '.join(
+                f"{name}={prefix}" + f"{value:{format_spec}}"
+                if isinstance(value, int)
+                else f"{name}={value}"
+                for name, value in zip(self.field_name, values)
+            )
+
         if format_spec == '':
             return str(self)
-        elif format_spec in ('b', 'B'):
-            field_values: list = []
-            for name in self.field_name:
-                value = getattr(self, name)
-                if isinstance(value, int):
-                    field_values.append(f"{name}=0b"+f"{value:08b}".upper())
-                else:
-                    field_values.append(f"{name}={value}")
-            field_values: str = ', '.join(field_values)
-            return f"{self.__class__.__name__}({field_values})"
-        elif format_spec in ('x', 'X'):
-            field_values: list = []
-            for name in self.field_name:
-                value = getattr(self, name)
-                if isinstance(value, int):
-                    field_values.append(f"{name}=0x"+f"{value:08x}".upper())
-                else:
-                    field_values.append(f"{name}={value}")
-            field_values: str = ', '.join(field_values)
-            return f"{self.__class__.__name__}({field_values})"
+        if fullmatch(r'^\d*[bBxX]$', format_spec):
+            prefix = '0b' if format_spec[-1] in 'bB' else '0x'
+            return f"{self.__class__.__name__}({format_fields(format_spec, prefix)})"
         else:
             raise ValueError(f"Unsupported format specifier: {format_spec}")
 
@@ -169,6 +161,9 @@ class Structure(_Structure):
 
     def __call__(self):
         return byref(self)
+
+    def __contains__(self, item):
+        return item in self.field_name
 
 # processthreadsapi.h line 28
 class PROCESS_INFORMATION(Structure):
@@ -304,14 +299,33 @@ class TIMEINFO(Structure):
         ("UserTime",        FILETIME)
     ]
 
-class SID_AND_ATTRIBUTES(Structure):
+class SID_IDENTIFIER_AUTHORITY(Structure):
     _fields_ = [
-        ("Sid",         c_void_p),
+        ("Value",   c_ubyte * 6),
+    ]
+
+class SID(Structure):
+    _fields_ = [
+        ("Revision",            c_byte),
+        ("SubAuthorityCount",   c_byte),
+        ("IdentifierAuthority", SID_IDENTIFIER_AUTHORITY),
+        ("SubAuthority",        c_ulong * 1),
+    ]
+
+class LUID(Structure):
+    _fields_ = [
+        ("LowPart",     c_ulong),
+        ("HighPart",    c_long),
+    ]
+
+class LUID_AND_ATTRIBUTES(Structure):
+    _fields_ = [
+        ("Luid",        LUID),
         ("Attributes",  c_ulong),
     ]
 
-class TOKEN_GROUPS(Structure):
+class TOKEN_PRIVILEGES(Structure):
     _fields_ = [
-        ("GroupCount",  c_ulong),
-        ("Groups",      SID_AND_ATTRIBUTES * 1),
+        ("PrivilegeCount",    c_ulong),
+        ("Privileges",        LUID_AND_ATTRIBUTES * 1),
     ]

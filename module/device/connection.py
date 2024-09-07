@@ -103,23 +103,21 @@ class AdbDeviceWithStatus(AdbDevice):
 
 
 class Connection(ConnectionAttr):
-    _initialized = False
-
     def __init__(self, config):
         """
         Args:
             config (AzurLaneConfig, str): Name of the user config under ./config
         """
         super().__init__(config)
-        if not Connection._initialized:
-            Connection._initialized = True
-            return
 
         if not self.is_over_http:
             self.detect_device()
 
         # Connect
-        self.adb_connect()
+        try:
+            self.adb_connect()
+        except EmulatorNotRunningError:
+            return
         logger.attr('AdbDevice', self.adb)
 
         # Package

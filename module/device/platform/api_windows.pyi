@@ -1,4 +1,4 @@
-from typing import Generator, List, NewType, Tuple
+from typing import Any, Generator, Iterable, List, NewType, Tuple
 
 from module.device.platform.platform_base import PlatformBase
 from module.device.platform.emulator_windows import EmulatorInstance
@@ -12,11 +12,12 @@ class Winapi(PlatformBase, WinapiFunctions):
     """
     Winapi base class.
     """
-    def close_handle(self, *args, fclose: Callable[[HANDLE], None] = None) -> bool:
+    def close_handle(self, handles: Iterable[Any], *args, fclose: Callable[[HANDLE], None] = None) -> bool:
         """
         Close handles.
 
         Args:
+            handles (Iterable[Any]): Handles to close.
             *args (int | c_void_p): Handles to close.
             fclose (Optional[CloseHandle]):
 
