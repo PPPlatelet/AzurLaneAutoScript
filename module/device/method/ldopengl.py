@@ -220,8 +220,7 @@ class LDOpenGLImpl:
         Raises:
             LDOpenGLError:
         """
-        list2 = self.console.list2()
-        for info in list2:
+        for info in self.console.list2():
             if info.index == instance_id:
                 logger.info(f'Match LDPlayer instance: {info}')
                 if not info.sysboot:
@@ -248,9 +247,6 @@ class LDOpenGLImpl:
         image = np.ctypeslib.as_array(img).copy().reshape((height, width, 3))
         return image
 
-    def save_screenshot(self, image, path):
-        flipped_image = cv2.flip(image, 0)
-        cv2.imwrite(path, flipped_image)
 
     @staticmethod
     def serial_to_id(serial: str):
@@ -329,14 +325,10 @@ class LDOpenGL(Platform):
 
 
 if __name__ == '__main__':
-    ld = LDOpenGLImpl("F:/leidian/LDPlayer9", instance_id=0)
+    ld = LDOpenGLImpl('E:/ProgramFiles/LDPlayer9', instance_id=1)
     for _ in range(5):
         import time
 
         start = time.time()
-        i = ld.screenshot()
-        ld.save_screenshot(
-            i,
-            fr"E:\Program Files (x86)\AkkoAkko\python\AzurLaneAutoScript\screenshots\screenshot{_+1}.png"
-        )
+        ld.screenshot()
         print(time.time() - start)

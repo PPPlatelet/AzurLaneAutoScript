@@ -114,7 +114,7 @@ class Highlighter(RegexHighlighter):
          r'([0-5]{1}\d{1})(?::)?([0-5]{1}\d{1})(.\d+\b))'),
         r"(?P<brace>[\{\[\(\)\]\}])",
         r"\b(?P<bool_true>True)\b|\b(?P<bool_false>False)\b|\b(?P<none>None)\b",
-        r'(?:(?:[a-zA-Z]:|\.{1,2})?[\\/](?:[^\\?/*|<>:"]+[\\/])*)(?:(?:[^,\\?/*|<>:"]+)(?:\.[^,.\\?/*|<>:"]+)?)?',
+        r"(?P<path>(([A-Za-z]\:)|.)?\B([\/\\][\w\.\-\_\+]+)*[\/\\])(?P<filename>[\w\.\-\_\+]*)?",
         # r"(?<![\\\w])(?P<str>b?\'\'\'.*?(?<!\\)\'\'\'|b?\'.*?(?<!\\)\'|b?\"\"\".*?(?<!\\)\"\"\"|b?\".*?(?<!\\)\")",
     ]
 
@@ -355,6 +355,3 @@ logger.log_file: str
 
 logger.set_file_logger()
 logger.hr('Start', level=0)
-
-if __name__ == '__main__':
-    show()
