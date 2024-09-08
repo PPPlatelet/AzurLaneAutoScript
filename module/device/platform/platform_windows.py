@@ -13,7 +13,7 @@ from module.logger import logger
 class EmulatorUnknown(Exception):
     pass
 
-class PlatformWindows(PlatformBase, EmulatorManager, Winapi):
+class PlatformWindows(Winapi, PlatformBase, EmulatorManager):
     # Quadruple, contains the kernel process object, kernel thread object, process ID and thread ID.
     # If the kernel process object and kernel thread object are no longer used, PLEASE USE CloseHandle.
     # Otherwise, it'll crash the system in some cases.
@@ -23,16 +23,13 @@ class PlatformWindows(PlatformBase, EmulatorManager, Winapi):
     # Pair, contains the hwnd of the focused window and a WINDOWPLACEMENT object.
     focusedwindow: tuple = ()
 
-    def __new__(cls, *args, **kwargs): # Multiton Pattern
-        return super(PlatformWindows, cls).__new__(cls)
-
     def __execute(self, command: str, start: bool) -> bool:
         command = hex_or_normalize_path(command)
         logger.info(f'Execute: {command}')
 
         silentstart = False if self.config.Emulator_SilentStart == 'normal' else True
 
-        if self.process is not None and not all(self.process[:2]):
+        if self.process is not None and all(self.process[:2]):
             self.close_handle(handles=self.process[:2])
             self.process = None
 
@@ -47,24 +44,22 @@ class PlatformWindows(PlatformBase, EmulatorManager, Winapi):
     def _stop(self, command: str) -> bool:
         return self.__execute(command, start=False)
 
-    def switch_window(self, hwnds=None, arg=None) -> bool:
+    def switch_window(self) -> bool:
         if self.process is None:
             self.process = self.get_process(self.emulator_instance)
         if not self.hwnds:
             self.hwnds = self.get_hwnds(self.process[2])
-        if hwnds is None:
-            hwnds = self.hwnds
         method = self.config.Emulator_SilentStart
-        if method == 'normal' and arg is None:
+        if method == 'normal':
             arg = self.SW_SHOW
-        elif method == 'minimize' and arg is None:
+        elif method == 'minimize':
             arg = self.SW_MINIMIZE
-        elif method == 'silent' and arg is None:
+        elif method == 'silent':
             arg = self.SW_HIDE
         else:
             from module.exception import ScriptError
             raise ScriptError("Wrong setting")
-        return super().switch_window(hwnds, arg)
+        return super().switch_window(self.hwnds, arg)
 
     def _emulator_start(self, instance: EmulatorInstance):
         """
@@ -282,6 +277,7 @@ class PlatformWindows(PlatformBase, EmulatorManager, Winapi):
             if self._emulator_function_wrapper(self._emulator_start):
                 # Success
                 self.emulator_start_watch()
+                self.switch_window()
                 return True
             # Failed to start, stop and start again
             if self._emulator_function_wrapper(self._emulator_stop):

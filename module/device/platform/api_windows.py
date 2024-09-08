@@ -15,6 +15,9 @@ from module.base.timer import Timer
 from module.logger import logger
 
 class Winapi(WinapiFunctions):
+    # TODO:Send MessageBox
+    # TODO:Send Notify
+
     def close_handle(self, handles: Iterable[Any], *args, fclose=None):
         from itertools import chain
 
@@ -138,7 +141,7 @@ class Winapi(WinapiFunctions):
             wShowWindow             = self.SW_FORCEMINIMIZE if silentstart else self.SW_MINIMIZE
         )
         lpProcessInformation        = PROCESS_INFORMATION()
-
+        """
         TokenHandle = HANDLE()
         assert self.OpenProcessToken(
             self.GetCurrentProcess(),
@@ -155,9 +158,8 @@ class Winapi(WinapiFunctions):
             self.TOKEN_PRIMARY,
             byref(DuplicateTokenHandle)
         ), self.report("Failed to duplicate token", exc_type=EmulatorLaunchFailedError)
-
-        assert self.CreateProcessAsUserW(
-            DuplicateTokenHandle,
+        """
+        assert self.CreateProcessW(
             lpApplicationName,
             lpCommandLine,
             lpProcessAttributes,
@@ -174,7 +176,7 @@ class Winapi(WinapiFunctions):
             self.close_handle(lpProcessInformation[:2])
             lpProcessInformation = None
 
-        self.close_handle((), TokenHandle, DuplicateTokenHandle)
+        # self.close_handle((), TokenHandle, DuplicateTokenHandle)
 
         return lpProcessInformation, focusedwindow
 

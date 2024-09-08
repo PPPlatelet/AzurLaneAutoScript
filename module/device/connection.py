@@ -18,7 +18,7 @@ from module.device.env import IS_LINUX, IS_MACINTOSH, IS_WINDOWS
 from module.device.method.utils import (PackageNotInstalled, RETRY_TRIES, get_serial_pair, handle_adb_error,
                                         handle_unknown_host_service, possible_reasons, random_port, recv_all,
                                         remove_shell_warning, retry_sleep)
-from module.exception import EmulatorNotRunningError, RequestHumanTakeover
+from module.exception import RequestHumanTakeover
 from module.logger import logger
 from module.map.map_grids import SelectedGrids
 
@@ -114,9 +114,7 @@ class Connection(ConnectionAttr):
             self.detect_device()
 
         # Connect
-        try:
-            self.adb_connect()
-        except EmulatorNotRunningError:
+        if not self.adb_connect():
             return
         logger.attr('AdbDevice', self.adb)
 
@@ -706,7 +704,7 @@ class Connection(ConnectionAttr):
                         return True
                 # No such device
                 logger.warning('No such device exists, please restart the emulator or set a correct serial')
-                raise EmulatorNotRunningError
+                return False
 
         # Failed to connect
         logger.warning(f'Failed to connect {self.serial} after 3 trial, assume connected')

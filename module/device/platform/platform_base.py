@@ -27,6 +27,8 @@ class PlatformBase(Connection, EmulatorManagerBase):
     For each `Platform` class, the following APIs must be implemented.
     - all_emulators()
     - all_emulator_instances()
+    - switch_window()
+    - emulator_check()
     - emulator_start()
     - emulator_stop()
     """

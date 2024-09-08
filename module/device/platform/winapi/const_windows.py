@@ -13,7 +13,18 @@ class SingletonMeta(type):
                 cls._instances[cls] = super().__call__(*args, **kwargs)
         return cls._instances[cls]
 
-class WinapiConstants(metaclass=SingletonMeta):
+class MultitonMeta(SingletonMeta):
+    _instances = {}
+    _lock = threading.Lock()
+
+    def __call__(cls, *args, **kwargs):
+        key = (cls, args, frozenset(kwargs.items()))
+        with cls._lock:
+            if key not in cls._instances:
+                cls._instances[key] = type.__call__(*args, **kwargs)
+        return cls._instances[key]
+
+class WinapiConstants:
     # winnt.h line 3961
     PROCESS_TERMINATE                   = 0x0001
     PROCESS_CREATE_THREAD               = 0x0002

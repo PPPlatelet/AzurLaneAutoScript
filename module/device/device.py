@@ -340,6 +340,3 @@ class Device(Screenshot, Control, AppControl):
         self.switch_window()
         self.stuck_record_clear()
         self.click_record_clear()
-
-    def switch_window(self, hwnds=None, arg=None):
-        return super().switch_window(hwnds, arg)

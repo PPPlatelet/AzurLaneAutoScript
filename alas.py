@@ -26,6 +26,7 @@ class AzurLaneAutoScript:
         # Failure count of tasks
         # Key: str, task name, value: int, failure count
         self.failure_record = {}
+        self.first_check = True
 
     @cached_property
     def config(self):
@@ -166,9 +167,9 @@ class AzurLaneAutoScript:
         from module.device.platform import Platform
         return Platform(self.config).emulator_check()
 
-    def reboot(self, log=True):
+    def reboot(self, use_log=True):
         from module.device.platform import Platform
-        if log:
+        if use_log:
             logger.warning('Emulator is not running')
         p = Platform(self.config)
         p.emulator_stop()
@@ -562,9 +563,11 @@ class AzurLaneAutoScript:
                 del_cached_property(self, 'config')
                 logger.info('Server or network is recovered. Restart game client')
                 self.config.task_call('Restart')
-            # Reboot emulator
-            if not self.check():
-                self.run('reboot', True)
+            if self.first_check:
+                if not self.check():
+                    # reboot emulator
+                    self.run('reboot', True)
+                self.first_check = False
             # Init device and change server
             _ = self.device
             # Get task

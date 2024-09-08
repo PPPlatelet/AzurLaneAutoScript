@@ -308,7 +308,7 @@ class Handle_(metaclass=ABCMeta):
         if hasattr(self, '_func'):
             self._handle = HANDLE(self._func(*self.__get_init_args__(*args, **kwargs)))
             assert self, self.functions.report(
-                f"{self._func.__name__} failed.",
+                f"{self._func.__name__} failed",
                 use_log=kwargs.get('use_log', True),
                 raise_exc=kwargs.get("raise_exc", True)
             )
@@ -337,7 +337,7 @@ class ProcessHandle(Handle_):
     _func       = Handle_.functions.OpenProcess
     _exitfunc   = Handle_.functions.CloseHandle
 
-    def __get_init_args__(self, access: int, pid: int, uselog: bool, raise_: bool) -> tuple:
+    def __get_init_args__(self, access: int, pid: int, use_log: bool, raise_exc: bool) -> tuple:
         return access, False, pid
 
 class ThreadHandle(Handle_):
@@ -347,7 +347,7 @@ class ThreadHandle(Handle_):
     _func       = Handle_.functions.OpenThread
     _exitfunc   = Handle_.functions.CloseHandle
 
-    def __get_init_args__(self, access: int, tid: int, uselog: bool, raise_: bool) -> tuple:
+    def __get_init_args__(self, access: int, tid: int, use_log: bool, raise_exc: bool) -> tuple:
         return access, False, tid
 
 class CreateSnapshot(Handle_):
@@ -357,20 +357,20 @@ class CreateSnapshot(Handle_):
     _func       = Handle_.functions.CreateToolhelp32Snapshot
     _exitfunc   = Handle_.functions.CloseHandle
 
-    def __get_init_args__(self, access, uselog: bool, raise_: bool) -> tuple:
+    def __get_init_args__(self, access, use_log: bool, raise_exc: bool) -> tuple:
         return access, DWORD(0)
 
     def _is_invalid_handle(self) -> bool:
         return self._handle == self.functions.INVALID_HANDLE_VALUE
 
-def open_process(access: int, pid: int, uselog: bool = False, raise_: bool = True) -> ProcessHandle:
-    return ProcessHandle(access, pid, uselog=uselog, raise_=raise_)
+def open_process(access: int, pid: int, use_log: bool = False, raise_exc: bool = True) -> ProcessHandle:
+    return ProcessHandle(access, pid, use_log=use_log, raise_exc=raise_exc)
 
-def open_thread(access: int, tid: int, uselog: bool = False, raise_: bool = True) -> ThreadHandle:
-    return ThreadHandle(access, tid, uselog=uselog, raise_=raise_)
+def open_thread(access: int, tid: int, use_log: bool = False, raise_exc: bool = True) -> ThreadHandle:
+    return ThreadHandle(access, tid, use_log=use_log, raise_exc=raise_exc)
 
-def create_snapshot(access: int, uselog: bool = False, raise_: bool = True) -> CreateSnapshot:
-    return CreateSnapshot(access, uselog=uselog, raise_=raise_)
+def create_snapshot(access: int, use_log: bool = False, raise_exc: bool = True) -> CreateSnapshot:
+    return CreateSnapshot(access, use_log=use_log, raise_exc=raise_exc)
 
 def hex_or_normalize_path(input_str: str) -> Union[int, str]:
     """
