@@ -323,7 +323,6 @@ class LDOpenGL(Platform):
         cv2.cvtColor(image, cv2.COLOR_BGR2RGB, dst=image)
         return image
 
-
 if __name__ == '__main__':
     ld = LDOpenGLImpl('E:/ProgramFiles/LDPlayer9', instance_id=1)
     for _ in range(5):

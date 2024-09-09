@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 import time
 from functools import wraps
 from typing import Any, Callable, Optional, Union
+import logging
 
 from ctypes import POINTER, WINFUNCTYPE, WinDLL, c_size_t, c_void_p
 from ctypes.wintypes import \
@@ -252,14 +253,14 @@ class WinapiFunctions(WinapiConstants):
 
     def report(
             self,
-            msg: str            = '',
+            msg: str        = '',
             *args: tuple,
-            report_status: bool = True,
-            status_code: int    = -1,
-            use_log: bool       = True,
-            log_level: int      = 40,
-            raise_exc: bool     = True,
-            exc_type: type      = OSError,
+            r_status: bool  = True,
+            status: int     = -1,
+            use_log: bool   = True,
+            level: int      = 40,
+            r_exc: bool     = True,
+            exc: type       = OSError,
             **kwargs: dict
     ) -> None:
         """
@@ -268,31 +269,31 @@ class WinapiFunctions(WinapiConstants):
         Args:
             msg (str): The message to report.
             args (tuple): Additional arguments.
-            report_status (bool): Whether to report the status code.
-            status_code (int): The status code to report.
+            r_status (bool): Whether to report the status code.
+            status (int): The status code to report.
             use_log (bool): Whether to log the message.
-            log_level (int): Logging level
-            raise_exc (bool): Flag indicating whether to raise an exception.
-            exc_type (Type[Exception]): Exception class to raise.
+            level (int): Logging level
+            r_exc (bool): Flag indicating whether to raise an exception.
+            exc (Type[Exception]): Exception class to raise.
             kwargs (dict): Additional keyword arguments.
 
         Raises:
-            Optional[OSError]: The specified exception class if raise_exc is True.
+            Optional[OSError]: The specified exception class if r_exc is True.
         """
         message: list = [msg]
-        if report_status:
-            if status_code == -1:
-                status_code = self.GetLastError()
-            message.append(f"Status code: 0x{status_code:08x}")
+        if r_status:
+            if status == -1:
+                status = self.GetLastError()
+            message.append(f"Status code: 0x{status:08x}")
         if args:
             message.append(f"args: {' '.join(map(str, args))}")
         if kwargs:
             message.append(f"kwargs: {kwargs}")
         message: str = '. '.join(message)
         if use_log:
-            logger.log(log_level, message)
-        if raise_exc:
-            raise exc_type(message)
+            logger.log(level, message)
+        if r_exc:
+            raise exc(message)
 
 class Handle_(metaclass=ABCMeta):
     """
@@ -310,7 +311,7 @@ class Handle_(metaclass=ABCMeta):
             assert self, self.functions.report(
                 f"{self._func.__name__} failed",
                 use_log=kwargs.get('use_log', True),
-                raise_exc=kwargs.get("raise_exc", True)
+                r_exc=kwargs.get("r_exc", True)
             )
 
     def __enter__(self) -> HANDLE:
@@ -393,7 +394,7 @@ def get_func_path(func: Callable[..., Any]) -> str:
         func (Callable[..., Any]):
 
     Examples:
-        >>> print(get_func_path(WinapiFunctions().report))
+        >>> print(get_func_path(WinapiFunctions.report))
         -> 'module.device.platform.winapi.functions_windows.report'
         >>> print(get_func_path(FILETIME.__init_subclass__))
         -> 'module.device.platform.winapi.structures_windows.Structure::__init_subclass__'
@@ -413,39 +414,38 @@ def get_func_path(func: Callable[..., Any]) -> str:
     funcpath: str = '.'.join(funcpath)
     return funcpath
 
-def timer(timeout: int = 1):
-    import logging
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-    executor = ThreadPoolExecutor(max_workers=1)
+class Alog(logging):
+    def __init__(self, func, level):
+        self.path = get_func_path(func)
+        self.original_level = level
+        logger.setLevel(self.DEBUG)
 
+    def __enter__(self):
+        logger.debug(f"{self.path} | Enter")
+        self.start_time = time.perf_counter()
+        return self.path
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.execution_time = (time.perf_counter() - self.start_time) * 1e3
+        logger.debug(f"{self.path} | Leave, {self.execution_time} ms")
+        logger.setLevel(self.original_level)
+
+def timer(timeout: int = 1):
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
     def decorator(func):
         if not callable(func):
             raise TypeError(f"Expected a callable, but got {type(func).__name__}")
-
         @wraps(func)
         def wrapper(*args, **kwargs):
-            func_path: str = get_func_path(func)
-
-            original_level = logger.level
-            logger.setLevel(logging.DEBUG)
-
-            logger.debug(f"{func_path} | Enter")
-            start_time = time.perf_counter()
-
-            try:
-                result = executor.submit(func, *args, **kwargs).result(timeout)
-            except FuturesTimeoutError:
-                logger.error(f"{func_path} timed out after {timeout} seconds")
-                raise TimeoutError(f"{func_path} timed out after {timeout} seconds")
-            except Exception as e:
-                logger.error(f"{func_path} failed: {e}")
-                raise e
-
-            execution_time = (time.perf_counter() - start_time) * 1e3
-            logger.debug(f"{func_path} | Leave, {execution_time} ms")
-
-            logger.setLevel(original_level)
-
+            with Alog(func, logger.level) as path, ThreadPoolExecutor(max_workers=1) as executor:
+                try:
+                    result = executor.submit(func, *args, **kwargs).result(timeout)
+                except FuturesTimeoutError:
+                    logger.error(f"{path} timed out after {timeout} seconds")
+                    raise TimeoutError(f"{path} timed out after {timeout} seconds")
+                except Exception as e:
+                    logger.error(f"{path} failed: {e}")
+                    raise e
             return result
         return wrapper
     return decorator
