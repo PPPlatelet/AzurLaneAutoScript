@@ -3,6 +3,7 @@ import time
 from functools import wraps
 from typing import Any, Callable, Optional, Union
 import logging
+import threading
 
 from ctypes import POINTER, WINFUNCTYPE, WinDLL, c_size_t, c_void_p
 from ctypes.wintypes import \
@@ -295,12 +296,11 @@ class WinapiFunctions(WinapiConstants):
         if r_exc:
             raise exc(message)
 
-class Handle_(metaclass=ABCMeta):
+class Handle_(WinapiFunctions, metaclass=ABCMeta):
     """
     Abstract base Handle class.
     Please override these functions if needed.
     """
-    functions = WinapiFunctions()
     _handle:    Optional[c_void_p]
     _func:      Callable[..., c_void_p]
     _exitfunc:  Callable[[c_void_p], None]
@@ -308,7 +308,7 @@ class Handle_(metaclass=ABCMeta):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         if hasattr(self, '_func'):
             self._handle = HANDLE(self._func(*self.__get_init_args__(*args, **kwargs)))
-            assert self, self.functions.report(
+            assert self, self.report(
                 f"{self._func.__name__} failed",
                 use_log=kwargs.get('use_log', True),
                 r_exc=kwargs.get("r_exc", True)
@@ -335,43 +335,43 @@ class ProcessHandle(Handle_):
     """
     Process handle class.
     """
-    _func       = Handle_.functions.OpenProcess
-    _exitfunc   = Handle_.functions.CloseHandle
+    _func       = Handle_.OpenProcess
+    _exitfunc   = Handle_.CloseHandle
 
-    def __get_init_args__(self, access: int, pid: int, use_log: bool, raise_exc: bool) -> tuple:
+    def __get_init_args__(self, access: int, pid: int, use_log: bool, r_exc: bool) -> tuple:
         return access, False, pid
 
 class ThreadHandle(Handle_):
     """
     Thread handle class.
     """
-    _func       = Handle_.functions.OpenThread
-    _exitfunc   = Handle_.functions.CloseHandle
+    _func       = Handle_.OpenThread
+    _exitfunc   = Handle_.CloseHandle
 
-    def __get_init_args__(self, access: int, tid: int, use_log: bool, raise_exc: bool) -> tuple:
+    def __get_init_args__(self, access: int, tid: int, use_log: bool, r_exc: bool) -> tuple:
         return access, False, tid
 
 class CreateSnapshot(Handle_):
     """
     Snapshot handle class.
     """
-    _func       = Handle_.functions.CreateToolhelp32Snapshot
-    _exitfunc   = Handle_.functions.CloseHandle
+    _func       = Handle_.CreateToolhelp32Snapshot
+    _exitfunc   = Handle_.CloseHandle
 
-    def __get_init_args__(self, access, use_log: bool, raise_exc: bool) -> tuple:
+    def __get_init_args__(self, access, use_log: bool, r_exc: bool) -> tuple:
         return access, DWORD(0)
 
     def _is_invalid_handle(self) -> bool:
-        return self._handle == self.functions.INVALID_HANDLE_VALUE
+        return self._handle == self.INVALID_HANDLE_VALUE
 
-def open_process(access: int, pid: int, use_log: bool = False, raise_exc: bool = True) -> ProcessHandle:
-    return ProcessHandle(access, pid, use_log=use_log, raise_exc=raise_exc)
+def open_process(access: int, pid: int, use_log: bool = False, r_exc: bool = True) -> ProcessHandle:
+    return ProcessHandle(access, pid, use_log=use_log, r_exc=r_exc)
 
-def open_thread(access: int, tid: int, use_log: bool = False, raise_exc: bool = True) -> ThreadHandle:
-    return ThreadHandle(access, tid, use_log=use_log, raise_exc=raise_exc)
+def open_thread(access: int, tid: int, use_log: bool = False, r_exc: bool = True) -> ThreadHandle:
+    return ThreadHandle(access, tid, use_log=use_log, r_exc=r_exc)
 
-def create_snapshot(access: int, use_log: bool = False, raise_exc: bool = True) -> CreateSnapshot:
-    return CreateSnapshot(access, use_log=use_log, raise_exc=raise_exc)
+def create_snapshot(access: int, use_log: bool = False, r_exc: bool = True) -> CreateSnapshot:
+    return CreateSnapshot(access, use_log=use_log, r_exc=r_exc)
 
 def hex_or_normalize_path(input_str: str) -> Union[int, str]:
     """
@@ -394,31 +394,27 @@ def get_func_path(func: Callable[..., Any]) -> str:
         func (Callable[..., Any]):
 
     Examples:
-        >>> print(get_func_path(WinapiFunctions.report))
-        -> 'module.device.platform.winapi.functions_windows.report'
-        >>> print(get_func_path(FILETIME.__init_subclass__))
-        -> 'module.device.platform.winapi.structures_windows.Structure::__init_subclass__'
+        >>> get_func_path(WinapiFunctions.report)
+        'module.device.platform.winapi.functions_windows.report'
+        >>> get_func_path(FILETIME.__init_subclass__)
+        'module.device.platform.winapi.structures_windows.Structure::__init_subclass__'
 
     Returns:
         str:
     """
-    funcpath: list = []
-    if hasattr(func, '__module__'):
-        funcpath.append(getattr(func, '__module__'))
-    else:
-        pass
-    if hasattr(func, '__qualname__'):
-        funcpath.append(getattr(func, '__qualname__').replace('.', '::'))
-    else:
-        funcpath.append(getattr(func, '__name__').replace('.', '::'))
-    funcpath: str = '.'.join(funcpath)
-    return funcpath
+    if not callable(func):
+        raise TypeError(f"Expected a callable, but got {type(func).__name__}")
 
-class Alog(logging):
+    module = getattr(func, '__module__', '')
+    qualname = getattr(func, '__qualname__', getattr(func, '__name__', '')).replace('.', '::')
+
+    return '.'.join(filter(None, [module, qualname]))
+
+class TimerLogger:
     def __init__(self, func, level):
         self.path = get_func_path(func)
         self.original_level = level
-        logger.setLevel(self.DEBUG)
+        logger.setLevel(logging.DEBUG)
 
     def __enter__(self):
         logger.debug(f"{self.path} | Enter")
@@ -429,23 +425,78 @@ class Alog(logging):
         self.execution_time = (time.perf_counter() - self.start_time) * 1e3
         logger.debug(f"{self.path} | Leave, {self.execution_time} ms")
         logger.setLevel(self.original_level)
+        """
+        if exc_type is None:
+            logger.debug(f"{self.path} | Leave, {self.execution_time:.2f} ms")
+        else:
+            logger.error(f"{self.path} | Exception occurred: {exc_type.__name__}: {exc_val}")
+            if exc_tb:
+                tb_str = ''.join(traceback.format_tb(exc_tb))
+                logger.error(f"{self.path} | Traceback:\n{tb_str}")
+        """
 
 def timer(timeout: int = 1):
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+    """
+    A decorator to measure the execution time of a function with timeout control.
+
+    Args:
+        timeout (int): The maximum allowed execution time (in seconds) for the function.
+                       If the function execution time exceeds this value, a TimeoutError will be raised.
+
+    Notes:
+        1. There's no way to kill a RUNNING thread! Please ensure that the function being decorated doesn't get stuck in an endless loop.
+        2. threading.RLock is strongly recommended to ensure thread safety.
+        3. If the function execution time exceeds the specified timeout, the decorator will raise the TimeoutError.
+        4. This decorator is not intended for use in user environments. Please modify it if needed.
+
+    Examples:
+        >>> @timer(timeout=2)
+        >>> def fun():
+        >>>     for i in range(5):
+        >>>         logger.info("Function 'fun' running...")
+        >>>         time.sleep(1)
+        >>>
+        >>> try:
+        >>>     fun()
+        >>> except TimeoutError as e:
+        >>>     logger.error(e)
+        DEBUG │ __main__.fun | Enter
+        INFO  │ Function 'fun' running...
+        INFO  │ Function 'fun' running...
+        INFO  │ Function 'fun' running...
+        DEBUG │ __main__.fun | Leave, 2015.5029000000013 ms
+        ERROR │ TimeoutError: Function __main__.fun timedout after 2 seconds
+        INFO  │ Function 'fun' running...
+        INFO  │ Function 'fun' running...
+    """
     def decorator(func):
         if not callable(func):
             raise TypeError(f"Expected a callable, but got {type(func).__name__}")
+
         @wraps(func)
         def wrapper(*args, **kwargs):
-            with Alog(func, logger.level) as path, ThreadPoolExecutor(max_workers=1) as executor:
-                try:
-                    result = executor.submit(func, *args, **kwargs).result(timeout)
-                except FuturesTimeoutError:
-                    logger.error(f"{path} timed out after {timeout} seconds")
-                    raise TimeoutError(f"{path} timed out after {timeout} seconds")
-                except Exception as e:
-                    logger.error(f"{path} failed: {e}")
-                    raise e
-            return result
+            result, exc = None, None
+            stop_event, _lock = threading.Event(), threading.RLock()
+
+            def target():
+                nonlocal result, exc
+                with _lock:
+                    try:
+                        result = func(*args, **kwargs)
+                    except Exception as e:
+                        exc = e
+                    finally:
+                        stop_event.set()
+
+            with TimerLogger(func, logger.level) as path:
+                target_thread = threading.Thread(target=target, name=f"Thread-{path}")
+                target_thread.start()
+
+                if not stop_event.wait(timeout=timeout):
+                    raise TimeoutError(f"Function {path} timed out after {timeout} seconds")
+
+                if exc is not None:
+                    raise exc
+                return result
         return wrapper
     return decorator

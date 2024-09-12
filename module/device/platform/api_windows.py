@@ -29,10 +29,16 @@ class Winapi(WinapiFunctions):
                 count += 1
                 logger.info(f"Closed handle: {handle}")
                 continue
-            self.report(f"Expected a int or c_void_p, but got {type(handle).__name__}", r_status=False, level=30, r_exc=False)
+            self.report(
+                f"Expected a int or c_void_p, but got {type(handle).__name__}",
+                r_status=False, level=30, r_exc=False
+            )
 
         if not count:
-            self.report(f"All handles are unavailable, please check the running environment",r_status=False,r_exc=False)
+            self.report(
+                f"All handles are unavailable, please check the running environment",
+                r_status=False, r_exc=False
+            )
             return False
 
         return True
@@ -45,7 +51,7 @@ class Winapi(WinapiFunctions):
             # Finished querying
             errcode = self.GetLastError()
             assert errcode == self.ERROR_NO_MORE_FILES, self.report(f"{func.__name__} failed", status=errcode)
-            self.report("Finished querying.", use_log=False, exc=IterationFinished)
+            self.report("Finished querying", status=errcode, level=30, exc=IterationFinished)
 
     def _enum_processes(self) -> Generator[PROCESSENTRY32W, None, None]:
         lppe32 = PROCESSENTRY32W(sizeof(PROCESSENTRY32W))
@@ -170,7 +176,8 @@ class Winapi(WinapiFunctions):
 
     def terminate_process(self, pid):
         with open_process(self.PROCESS_TERMINATE, pid) as hProcess:
-            assert self.TerminateProcess(hProcess, 0), self.report("Failed to kill process")
+            assert self.TerminateProcess(hProcess, 0), \
+                self.report(f"Failed to terminate process: {pid}", level=30, r_exc=False)
         return True
 
     def get_hwnds(self, pid):
@@ -190,7 +197,7 @@ class Winapi(WinapiFunctions):
             logger.error("Hwnd not found!")
             logger.error("1.Perhaps emulator has been killed.")
             logger.error("2.Environment has something wrong. Please check the running environment.")
-            self.report("Hwnd not found", exc_type=HwndNotFoundError)
+            self.report("Hwnd not found", exc=HwndNotFoundError)
         return hwnds
 
     def get_cmdline(self, pid):
@@ -342,7 +349,10 @@ class Winapi(WinapiFunctions):
             count += 1
             self.ShowWindow(hwnd, arg)
         if not count:
-            self.report("All hwnds are unavailable, please check the running environment",r_status=False,r_exc=False)
+            self.report(
+                "All the hwnds are unavailable, please check the running environment",
+                r_status=False, r_exc=False
+            )
             return False
         return True
 
@@ -354,7 +364,7 @@ class Winapi(WinapiFunctions):
                 returnlength = ULONG(sizeof(pbi))
                 status = self.NtQueryInformationProcess(hProcess, 0, byref(pbi), returnlength, byref(returnlength))
                 assert status == self.STATUS_SUCCESS, \
-                    self.report(f"NtQueryInformationProcess failed. Status: 0x{status:x}", level=30)
+                    self.report(f"NtQueryInformationProcess failed. Status: 0x{status:08x}", level=30)
         except OSError:
             return -1
         return pbi.InheritedFromUniqueProcessId

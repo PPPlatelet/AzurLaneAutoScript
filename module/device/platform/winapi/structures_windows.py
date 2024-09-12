@@ -49,10 +49,10 @@ class Structure(_Structure):
         return True
 
     def __bool__(self):
-        def bool_obj(val, *objs):
-            if isinstance(val, str):
-                return val != '\x00'
-            return any(isinstance(val, obj) and value for obj in objs)
+        def bool_obj(v, *objs):
+            if isinstance(v, str):
+                return v != '\x00'
+            return any(isinstance(v, obj) and v for obj in objs)
         def bool_ptr(val):
             try:
                 return bool(val.contents.value)
