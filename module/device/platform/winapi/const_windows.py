@@ -5,7 +5,7 @@ from ctypes import c_void_p, c_byte
 
 class SingletonMeta(type):
     _instances = {}
-    _lock = threading.Lock()
+    _lock = threading.RLock()
 
     def __call__(cls, *args, **kwargs):
         with cls._lock:
@@ -15,7 +15,7 @@ class SingletonMeta(type):
 
 class MultitonMeta(SingletonMeta):
     _instances = {}
-    _lock = threading.Lock()
+    _lock = threading.RLock()
 
     def __call__(cls, *args, **kwargs):
         key = (cls, args, frozenset(kwargs.items()))
