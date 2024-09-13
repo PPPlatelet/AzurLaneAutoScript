@@ -444,7 +444,7 @@ def timer(timeout: int = 1):
                        If the function execution time exceeds this value, a TimeoutError will be raised.
 
     Notes:
-        1. There's no way to kill a RUNNING thread! Please ensure that the function being decorated doesn't get stuck in an endless loop.
+        1. There's no way to kill a RUNNING thread! Please ensure that the function being decorated doesn't get stuck in an infinite loop.
         2. threading.RLock is strongly recommended to ensure thread safety.
         3. If the function execution time exceeds the specified timeout, the decorator will raise the TimeoutError.
         4. This decorator is not intended for use in user environments. Please modify it if needed.

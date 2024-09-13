@@ -147,23 +147,12 @@ class Structure(_Structure):
         field_values = ', '.join(f"{name}={getattr(self, name)}" for name in self.field_name)
         return f"{self.__class__.__name__}({field_values})"
 
-    def __sizeof__(self):
-        return sizeof(self)
-
     def __iter__(self):
         for name in self.field_name:
             yield name, getattr(self, name)
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb): ...
-
     def __call__(self):
         return byref(self)
-
-    def __contains__(self, item):
-        return item in self.field_name
 
 # processthreadsapi.h line 28
 class PROCESS_INFORMATION(Structure):
