@@ -33,7 +33,7 @@ class PlatformBase(Connection, EmulatorManagerBase):
     - emulator_stop()
     """
 
-    def switch_window(self, hwnds, arg=None):
+    def switch_window(self, hwnds=None, arg=None):
         """
         Switch emulator's window.
         """

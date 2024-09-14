@@ -1,4 +1,4 @@
-from typing import Any, Generator, Iterable, List, NewType, Tuple
+from typing import Generator, Iterable, List, NewType, Tuple
 
 from module.device.platform.platform_base import PlatformBase
 from module.device.platform.emulator_windows import EmulatorInstance

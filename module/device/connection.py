@@ -114,10 +114,7 @@ class Connection(ConnectionAttr):
             self.detect_device()
 
         # Connect
-        try:
-            self.adb_connect()
-        except EmulatorNotRunningError:
-            return
+        self.adb_connect()
         logger.attr('AdbDevice', self.adb)
 
         # Package

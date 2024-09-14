@@ -16,7 +16,7 @@ from module.device.app_control import AppControl
 from module.device.control import Control
 from module.device.screenshot import Screenshot
 from module.exception import (GameNotRunningError, GameStuckError, GameTooManyClickError,
-                              RequestHumanTakeover)
+                              RequestHumanTakeover, EmulatorNotRunningError)
 from module.handler.assets import GET_MISSION
 from module.logger import logger
 
@@ -70,7 +70,24 @@ class Device(Screenshot, Control, AppControl):
     stuck_long_wait_list = ['BATTLE_STATUS_S', 'PAUSE', 'LOGIN_CHECK']
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        self._initialized = False
+        for trial in range(4):
+            try:
+                super().__init__(*args, **kwargs)
+                break
+            except EmulatorNotRunningError:
+                if trial >= 3:
+                    logger.critical('Failed to start emulator after 3 trial')
+                    raise RequestHumanTakeover
+                # Try to start emulator
+                if self.emulator_instance is not None:
+                    self.emulator_start()
+                else:
+                    logger.critical(
+                        f'No emulator with serial "{self.config.Emulator_Serial}" found, '
+                        f'please set a correct serial'
+                    )
+                    raise RequestHumanTakeover
 
         # Auto-fill emulator info
         if IS_WINDOWS and self.config.EmulatorInfo_Emulator == 'auto':
@@ -90,7 +107,9 @@ class Device(Screenshot, Control, AppControl):
             if self.config.Emulator_ControlMethod == 'minitouch':
                 self.early_minitouch_init()
 
-        self.switch_window()
+        if not self._initialized:
+            self._initialized = True
+            self.switch_window()
 
     def run_simple_screenshot_benchmark(self):
         """
@@ -130,9 +149,6 @@ class Device(Screenshot, Control, AppControl):
             logger.warning('Use MaaTouch on ldplayer')
             self.config.Emulator_ControlMethod = 'MaaTouch'
         pass
-
-    def emulator_check(self):
-        return super().emulator_check()
 
     def handle_night_commission(self, daily_trigger='21:00', threshold=30):
         """
@@ -337,6 +353,8 @@ class Device(Screenshot, Control, AppControl):
                 f'please set a correct serial'
             )
             raise
+        if not self._initialized:
+            self._initialized = True
         self.switch_window()
         self.stuck_record_clear()
         self.click_record_clear()

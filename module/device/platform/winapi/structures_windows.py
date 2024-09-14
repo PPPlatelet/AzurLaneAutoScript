@@ -1,7 +1,7 @@
 from re import search, fullmatch
 
 from ctypes import \
-    POINTER, sizeof, byref, Structure as _Structure, \
+    POINTER, Structure as _Structure, \
     c_int32, c_uint32, c_uint64, c_uint16, \
     c_wchar, c_void_p, c_ubyte, c_byte, c_long, c_ulong
 from ctypes.wintypes import MAX_PATH, FILETIME as _FILETIME
@@ -52,7 +52,7 @@ class Structure(_Structure):
         def bool_obj(v, *objs):
             if isinstance(v, str):
                 return v != '\x00'
-            return any(isinstance(v, obj) and v for obj in objs)
+            return any(isinstance(v, objs) and bool(v))
         def bool_ptr(val):
             try:
                 return bool(val.contents.value)
@@ -150,9 +150,6 @@ class Structure(_Structure):
     def __iter__(self):
         for name in self.field_name:
             yield name, getattr(self, name)
-
-    def __call__(self):
-        return byref(self)
 
 # processthreadsapi.h line 28
 class PROCESS_INFORMATION(Structure):

@@ -63,11 +63,11 @@ class AzurLaneAutoScript:
             logger.exception(e)
             exit(1)
 
-    def run(self, command, skip_first_screenshot=False):
+    def run(self, command, *args, skip_first_screenshot=False, **kwargs):
         try:
             if not skip_first_screenshot:
                 self.device.screenshot()
-            self.__getattribute__(command)()
+            getattr(self, command)(*args, **kwargs)
             return True
         except TaskEnd:
             return True
@@ -116,6 +116,9 @@ class AzurLaneAutoScript:
             )
             exit(1)
         except RequestHumanTakeover:
+            if not self.device.emulator_check():
+                self.reboot()
+                return False
             logger.critical('Request human takeover')
             handle_notify(
                 self.config.Error_OnePushConfig,
@@ -163,20 +166,16 @@ class AzurLaneAutoScript:
             with open(f'{folder}/log.txt', 'w', encoding='utf-8') as f:
                 f.writelines(lines)
 
-    def check(self):
-        from module.device.platform import Platform
-        return Platform(self.config).emulator_check()
-
     def reboot(self, use_log=True):
-        from module.device.platform import Platform
         if use_log:
             logger.warning('Emulator is not running')
-        p = Platform(self.config)
-        p.emulator_stop()
-        p.emulator_start()
+        self.device.emulator_stop()
+        self.device.emulator_start()
         del_cached_property(self, 'config')
 
-    def restart(self):
+    def restart(self, reboot=False):
+        if reboot:
+            self.reboot(use_log=False)
         from module.handler.login import LoginHandler
         LoginHandler(self.config, device=self.device).app_restart()
 
@@ -480,7 +479,7 @@ class AzurLaneAutoScript:
             buffertime: int         = self.config.Optimization_ProcessBufferTime
             if (
                 method == 'stop_emulator' and
-                self.check() and
+                self.device.emulator_check() and
                 remainingtime <= buffertime
             ):
                 method = self.config.Optimization_BufferMethod
@@ -523,12 +522,13 @@ class AzurLaneAutoScript:
                     del_cached_property(self, 'config')
                     method: str = self.config.Optimization_WhenTaskQueueEmpty
                     if (
-                        not self.check() and
+                        not self.device.emulator_check() and
                         method != 'stop_emulator'
                     ):
-                        self.run('reboot', True)
+                        self.run('reboot', skip_first_screenshot=True, use_log=False)
                     continue
-                self.run('reboot', True)
+                if not self.device.emulator_check():
+                    self.run('reboot', skip_first_screenshot=True, use_log=False)
             else:
                 logger.warning(f'Invalid Optimization_WhenTaskQueueEmpty: {method}, fallback to stay_there')
                 release_resources()
@@ -563,15 +563,14 @@ class AzurLaneAutoScript:
                 del_cached_property(self, 'config')
                 logger.info('Server or network is recovered. Restart game client')
                 self.config.task_call('Restart')
-            if self.first_check:
-                if not self.check():
-                    # reboot emulator
-                    self.run('reboot', True)
-                self.first_check = False
             # Init device and change server
             _ = self.device
             # Get task
             task = self.get_next_task()
+            if self.first_check:
+                if not self.device.emulator_check():
+                    self.run('reboot', skip_first_screenshot=True)
+                self.first_check = False
             self.device.config = self.config
             # Skip first restart
             if self.is_first_task and task == 'Restart':

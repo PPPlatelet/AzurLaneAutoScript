@@ -1,13 +1,9 @@
-from module.device.env import IS_WINDOWS
-if not IS_WINDOWS:
-    raise OSError("Current environment isn't Windows")
-
 import re
 from typing import Generator, Iterable
 from shlex import split as split_
 from os.path import dirname
 
-from ctypes import addressof, create_unicode_buffer, wstring_at
+from ctypes import addressof, byref, create_unicode_buffer, sizeof, wstring_at
 
 from module.device.platform.emulator_windows import Emulator
 from module.device.platform.winapi import *
@@ -20,38 +16,41 @@ class Winapi(WinapiFunctions):
 
     def close_handle(self, handles: Iterable[Any], *args, fclose=None):
         from itertools import chain
+
         if fclose is None:
             fclose = self.CloseHandle
-        count = 0
-        for handle in iter(chain(handles, args)):
+        closed = []
+
+        for handle in chain(handles, args):
             if isinstance(handle, (int, c_void_p)):
                 fclose(handle)
-                count += 1
-                logger.info(f"Closed handle: {handle}")
+                closed.append(handle)
                 continue
             self.report(
                 f"Expected a int or c_void_p, but got {type(handle).__name__}",
                 r_status=False, level=30, r_exc=False
             )
 
-        if not count:
-            self.report(
-                f"All handles are unavailable, please check the running environment",
-                r_status=False, r_exc=False
-            )
-            return False
+        if len(closed):
+            logger.info(f"Closed handles: {closed}")
+            return True
 
-        return True
+        self.report(
+            f"All handles are unavailable, please check the running environment",
+            r_status=False, r_exc=False
+        )
+        return False
 
     def __yield_entries(self, entry32, snapshot, func):
         while 1:
             yield entry32
             if func(snapshot, byref(entry32)):
                 continue
+
             # Finished querying
             errcode = self.GetLastError()
             assert errcode == self.ERROR_NO_MORE_FILES, self.report(f"{func.__name__} failed", status=errcode)
-            self.report("Finished querying", status=errcode, level=30, exc=IterationFinished)
+            self.report("Finished querying", status=errcode, use_log=False, exc=IterationFinished)
 
     def _enum_processes(self) -> Generator[PROCESSENTRY32W, None, None]:
         lppe32 = PROCESSENTRY32W(sizeof(PROCESSENTRY32W))
@@ -68,16 +67,19 @@ class Winapi(WinapiFunctions):
     def get_focused_window(self):
         hwnd = HWND(self.GetForegroundWindow())
         wp = WINDOWPLACEMENT(sizeof(WINDOWPLACEMENT))
+
         if not self.GetWindowPlacement(hwnd, byref(wp)):
             self.report("Failed to get windowplacement", level=30, r_exc=False)
             wp = None
+
         return hwnd, wp
 
     def set_focus_to_window(self, focusedwindow):
         self.SetForegroundWindow(focusedwindow[0])
+
         if focusedwindow[1] is None:
             self.ShowWindow(focusedwindow[0], self.SW_SHOWNORMAL)
-            return True
+
         self.ShowWindow(focusedwindow[0], focusedwindow[1].showCmd)
         self.SetWindowPlacement(focusedwindow[0], focusedwindow[1])
 
@@ -110,6 +112,7 @@ class Winapi(WinapiFunctions):
 
     def execute(self, command, silentstart, start):
         # TODO:Create Process with non-administrator privileges
+        logger.info(f"Create Process: {command}")
         focusedwindow               = self.get_focused_window()
         if start and silentstart:
             refresh_thread = threading.Thread(target=self.refresh_window, name='Refresh-Thread', args=(focusedwindow,))
@@ -167,6 +170,7 @@ class Winapi(WinapiFunctions):
         ),  self.report("Failed to start emulator", exc=EmulatorLaunchFailedError)
 
         if not start:
+            logger.info(f"Ending process, handles are no longer used, closed.")
             self.close_handle(lpProcessInformation[:2])
             lpProcessInformation = None
 
@@ -181,6 +185,7 @@ class Winapi(WinapiFunctions):
         return True
 
     def get_hwnds(self, pid):
+        logger.hr("Get hwnds", level=3)
         hwnds = []
 
         @self.EnumWindowsProc
@@ -198,6 +203,7 @@ class Winapi(WinapiFunctions):
             logger.error("1.Perhaps emulator has been killed.")
             logger.error("2.Environment has something wrong. Please check the running environment.")
             self.report("Hwnd not found", exc=HwndNotFoundError)
+        logger.info(f"Got Process's hwnds: {hwnds}")
         return hwnds
 
     def get_cmdline(self, pid):
@@ -208,7 +214,7 @@ class Winapi(WinapiFunctions):
                 returnlength = ULONG(sizeof(pbi))
                 status = self.NtQueryInformationProcess(hProcess, 0, byref(pbi), sizeof(pbi), byref(returnlength))
                 assert status == self.STATUS_SUCCESS, \
-                    self.report(f"NtQueryInformationProcess failed. Status: 0x{status:08x}", level=30)
+                    self.report(f"NtQueryInformationProcess failed. Status: 0x{status:08x}", r_status=False, level=30)
 
                 # Read PEB
                 peb = PEB()
@@ -237,8 +243,10 @@ class Winapi(WinapiFunctions):
             for lppe32 in self._enum_processes():
                 pid     = lppe32.th32ProcessID
                 cmdline = self.get_cmdline(lppe32.th32ProcessID)
+
                 if not re.search(regex, cmdline):
                     continue
+
                 logger.info(f'Kill emulator: {cmdline}')
                 self.terminate_process(pid)
                 count += 1
@@ -249,36 +257,19 @@ class Winapi(WinapiFunctions):
     def __get_time(fopen, fgettime, access, identification, select=0):
         with fopen(access, identification, False, False) as handle:
             ti = TIMEINFO()
-            if not fgettime(
-                handle,
-                byref(ti.CreationTime),
-                byref(ti.ExitTime),
-                byref(ti.KernelTime),
-                byref(ti.UserTime)
-            ):
-                return None
+            if not fgettime(handle, byref(ti.CreationTime), byref(ti.ExitTime), byref(ti.KernelTime), byref(ti.UserTime)):
+                return
             return ti[select].to_int()
 
     def _get_process_creation_time(self, pid):
-        return self.__get_time(
-            open_process,
-            self.GetProcessTimes,
-            self.PROCESS_QUERY_INFORMATION |
-            self.PROCESS_VM_READ,
-            pid,
-            0
-        )
+        access = self.PROCESS_QUERY_INFORMATION | self.PROCESS_VM_READ
+        return self.__get_time(open_process, self.GetProcessTimes, access, pid, select=0)
 
     def _get_thread_creation_time(self, tid):
-        return self.__get_time(
-            open_thread,
-            self.GetThreadTimes,
-            self.THREAD_QUERY_INFORMATION,
-            tid,
-            0
-        )
+        return self.__get_time(open_thread, self.GetThreadTimes, self.THREAD_QUERY_INFORMATION, tid, select=0)
 
     def get_thread(self, pid):
+        logger.hr("Get Thread", level=3)
         mainthreadid    = 0
         minstarttime    = self.MAXULONGLONG
         try:
@@ -294,11 +285,14 @@ class Winapi(WinapiFunctions):
                 minstarttime = threadstarttime
                 mainthreadid = lpte32.th32ThreadID
         except IterationFinished:
+            logger.info(f"Got Thread id: {mainthreadid}")
             return mainthreadid
 
     def _get_process(self, pid):
+        logger.info(f"Got Process id: {pid}")
+        logger.hr("Get Process Information", level=3)
         tid = self.get_thread(pid)
-        pi = PROCESS_INFORMATION(None, None, pid, tid)
+        pi = PROCESS_INFORMATION(dwProcessId=pid, dwThreadId=tid)
         try:
             hProcess = self.OpenProcess(self.PROCESS_ALL_ACCESS, False, pid)
             assert hProcess is not None, \
@@ -309,21 +303,24 @@ class Winapi(WinapiFunctions):
                 self.CloseHandle(hProcess)
                 self.report("OpenThread failed", level=30)
 
-            pi.hProcess, pi.hThread = hProcess, hThread
+            pi[:2] = hProcess, hThread
         except OSError as e:
             logger.warning(f"Failed to get process and thread handles: {e}")
         finally:
-            logger.info(f"Emulator Process: {pi}")
+            logger.info(f"Got Emulator Process: {pi}")
             return pi
 
     def get_process(self, instance):
+        logger.hr("Get Process", level=3)
         for lppe32 in self._enum_processes():
             pid = lppe32.th32ProcessID
             cmdline = self.get_cmdline(pid)
             if not cmdline:
                 continue
+
             if not instance.path.lower() in cmdline.lower():
                 continue
+
             if instance == Emulator.MuMuPlayer12:
                 match = re.search(r'-v\s*(\d+)', cmdline)
                 if match is None:
@@ -340,21 +337,23 @@ class Winapi(WinapiFunctions):
                     return self._get_process(pid)
 
     def switch_window(self, hwnds, arg=None):
+        logger.hr("Switch window", level=3)
         if arg is None:
             arg = self.SW_SHOWNORMAL
-        count = 0
+        closed = []
+
         for hwnd in hwnds:
             if not self.GetWindow(hwnd, self.GW_CHILD):
                 continue
-            count += 1
+            closed.append(hwnd)
             self.ShowWindow(hwnd, arg)
-        if not count:
-            self.report(
-                "All the hwnds are unavailable, please check the running environment",
-                r_status=False, r_exc=False
-            )
-            return False
-        return True
+
+        if len(closed):
+            logger.info(f"Switched windows: {closed}")
+            return True
+
+        self.report("All the hwnds are unavailable, please check the running environment", r_status=False, r_exc=False)
+        return False
 
     def get_parent_pid(self, pid):
         try:
@@ -364,7 +363,7 @@ class Winapi(WinapiFunctions):
                 returnlength = ULONG(sizeof(pbi))
                 status = self.NtQueryInformationProcess(hProcess, 0, byref(pbi), returnlength, byref(returnlength))
                 assert status == self.STATUS_SUCCESS, \
-                    self.report(f"NtQueryInformationProcess failed. Status: 0x{status:08x}", level=30)
+                    self.report(f"NtQueryInformationProcess failed. Status: 0x{status:08x}", r_status=False, level=30)
         except OSError:
             return -1
         return pbi.InheritedFromUniqueProcessId
@@ -410,16 +409,14 @@ class Winapi(WinapiFunctions):
         return is_admin.value == 1
 
     def set_privilege(self, hToken, lpszPrivilege, bEnablePrivilege):
-        tp = TOKEN_PRIVILEGES()
+        tp = TOKEN_PRIVILEGES(1)
         luid = LUID()
 
         if not self.LookupPrivilegeValueW(None, lpszPrivilege, byref(luid)):
             self.report("Failed to lookup privilege value", level=30, r_exc=False)
             return
 
-        tp.PrivilegeCount = 1
         tp.Privileges[0].Luid = luid
-
         tp.Privileges[0].Attributes = (self.SE_PRIVILEGE_ENABLED if bEnablePrivilege else 0)
 
         assert self.AdjustTokenPrivileges(hToken, False, byref(tp), sizeof(tp), None, None), \

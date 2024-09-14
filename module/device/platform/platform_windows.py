@@ -1,3 +1,4 @@
+from ctypes import c_void_p
 from typing import Callable
 
 from module.base.decorator import run_once
@@ -25,11 +26,11 @@ class PlatformWindows(Winapi, PlatformBase, EmulatorManager):
 
     def __execute(self, command: str, start: bool) -> bool:
         command = hex_or_normalize_path(command)
-        logger.info(f'Execute: {command}')
 
         silentstart = False if self.config.Emulator_SilentStart == 'normal' else True
 
-        if self.process is not None and all(self.process[:2]):
+        if isinstance(self.process, PROCESS_INFORMATION) and all(self.process[:2]):
+            logger.info(f"Close previous handles")
             self.close_handle(handles=self.process[:2])
             self.process = None
 
@@ -44,7 +45,9 @@ class PlatformWindows(Winapi, PlatformBase, EmulatorManager):
     def _stop(self, command: str) -> bool:
         return self.__execute(command, start=False)
 
-    def switch_window(self) -> bool:
+    def switch_window(self, hwnds=None, arg=None) -> bool:
+        if isinstance(hwnds, list) and all(isinstance(h, (int, c_void_p)) for h in hwnds) and isinstance(arg, int):
+            return super().switch_window(hwnds, arg)
         if self.process is None:
             self.process = self.get_process(self.emulator_instance)
         if not self.hwnds:
@@ -267,7 +270,6 @@ class PlatformWindows(Winapi, PlatformBase, EmulatorManager):
 
         logger.info(f'Emulator start completed')
         logger.info(f'Emulator Process: {self.process}')
-        logger.info(f'Emulator hwnds: {self.hwnds}')
         return True
 
     def emulator_start(self):
