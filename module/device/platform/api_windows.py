@@ -135,8 +135,11 @@ class Winapi(WinapiFunctions):
         lpStartupInfo               = STARTUPINFOW(
             cb                      = sizeof(STARTUPINFOW),
             dwFlags                 = self.STARTF_USESHOWWINDOW,
-            wShowWindow             = self.SW_FORCEMINIMIZE if silentstart else self.SW_MINIMIZE
         )
+        if start:
+            lpStartupInfo.wShowWindow = self.SW_FORCEMINIMIZE if silentstart else self.SW_MINIMIZE
+        else:
+            lpStartupInfo.wShowWindow = self.SW_FORCEMINIMIZE
         lpProcessInformation        = PROCESS_INFORMATION()
         """
         TokenHandle = HANDLE()
@@ -192,7 +195,7 @@ class Winapi(WinapiFunctions):
         def callback(hwnd: HWND, lparam: LPARAM):  # DO NOT DELETE THIS PARAMETER!!!
             processid = DWORD()
             self.GetWindowThreadProcessId(hwnd, byref(processid))
-            if processid.value == pid:
+            if processid.value == pid and self.GetWindow(hwnd, self.GW_CHILD):
                 hwnds.append(HWND(hwnd))
             return True
 
@@ -340,20 +343,10 @@ class Winapi(WinapiFunctions):
         logger.hr("Switch window", level=3)
         if arg is None:
             arg = self.SW_SHOWNORMAL
-        closed = []
-
         for hwnd in hwnds:
-            if not self.GetWindow(hwnd, self.GW_CHILD):
-                continue
-            closed.append(hwnd)
             self.ShowWindow(hwnd, arg)
-
-        if len(closed):
-            logger.info(f"Switched windows: {closed}")
-            return True
-
-        self.report("All the hwnds are unavailable, please check the running environment", r_status=False, r_exc=False)
-        return False
+        logger.info(f"Switched windows: {hwnds}")
+        return True
 
     def get_parent_pid(self, pid):
         try:
