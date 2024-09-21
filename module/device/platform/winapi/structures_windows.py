@@ -1,9 +1,9 @@
 from re import search, fullmatch
 
 from ctypes import \
-    POINTER, Structure as _Structure, \
+    POINTER, Structure as _Structure, WINFUNCTYPE, \
     c_int32, c_uint32, c_uint64, c_uint16, \
-    c_wchar, c_void_p, c_ubyte, c_byte, c_long, c_ulong
+    c_wchar, c_wchar_p, c_void_p, c_ubyte, c_byte, c_long, c_ulong
 from ctypes.wintypes import MAX_PATH, FILETIME as _FILETIME
 
 class WinApiBaseException(Exception): ...
@@ -238,7 +238,8 @@ class WINDOWPLACEMENT(Structure):
         ("showCmd",             c_uint32),
         ("ptMinPosition",       POINT),
         ("ptMaxPosition",       POINT),
-        ("rcNormalPosition",    RECT)
+        ("rcNormalPosition",    RECT),
+        ("rcDevice",            RECT)
     ]
 
 # winternl.h line 25
@@ -314,4 +315,31 @@ class TOKEN_PRIVILEGES(Structure):
     _fields_ = [
         ("PrivilegeCount",    c_ulong),
         ("Privileges",        LUID_AND_ATTRIBUTES * 1),
+    ]
+
+class HELPINFO(Structure):
+    _fields_ = [
+        ("cbSize",          c_uint32),
+        ("iContextType",    c_int32),
+        ("iCtrlId",         c_int32),
+        ("hItemHandle",     c_void_p),
+        ("dwContextId",     c_uint32),
+        ("MousePos",        POINT),
+    ]
+
+LPHELPINFO = POINTER(HELPINFO)
+MSGBOXCALLBACK = WINFUNCTYPE(None, LPHELPINFO)
+
+class MSGBOXPARAMSW(Structure):
+    _fields_ = [
+        ("cbSize",              c_uint32),
+        ("hwndOwner",           c_void_p),
+        ("hInstance",           c_void_p),
+        ("lpszText",            c_wchar_p),
+        ("lpszCaption",         c_wchar_p),
+        ("dwStyle",             c_ulong),
+        ("lpszIcon",            c_wchar_p),
+        ("dwContextHelpId",     c_uint32),
+        ("lpfnMsgBoxCallback",  MSGBOXCALLBACK),
+        ("dwLanguageId",        c_ulong),
     ]

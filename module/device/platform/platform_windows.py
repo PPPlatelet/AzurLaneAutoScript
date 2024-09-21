@@ -6,15 +6,19 @@ from module.base.timer import Timer
 from module.device.connection import AdbDeviceWithStatus
 from module.device.platform.platform_base import PlatformBase
 from module.device.platform.emulator_windows import Emulator, EmulatorInstance, EmulatorManager
-from module.device.platform.api_windows import Winapi
+from module.device.platform import api_windows
 from module.device.platform.winapi import \
     hex_or_normalize_path, EmulatorLaunchFailedError, PROCESS_INFORMATION, IterationFinished
+from module.device.platform.winapi.const_windows import SW_SHOW, SW_MINIMIZE, SW_HIDE
 from module.logger import logger
+from module.exception import ALASBaseError
 
-class EmulatorUnknown(Exception):
+
+class EmulatorUnknown(ALASBaseError):
     pass
 
-class PlatformWindows(Winapi, PlatformBase, EmulatorManager):
+
+class PlatformWindows(PlatformBase, EmulatorManager):
     # Quadruple, contains the kernel process object, kernel thread object, process ID and thread ID.
     # If the kernel process object and kernel thread object are no longer used, PLEASE USE CloseHandle.
     # Otherwise, it'll crash the system in some cases.
@@ -31,12 +35,12 @@ class PlatformWindows(Winapi, PlatformBase, EmulatorManager):
 
         if isinstance(self.process, PROCESS_INFORMATION) and all(self.process[:2]):
             logger.info(f"Close previous handles")
-            self.close_handle(handles=self.process[:2])
+            api_windows.close_handle(handles=self.process[:2])
             self.process = None
 
         self.hwnds = []
 
-        self.process, self.focusedwindow = self.execute(command, silentstart, start)
+        self.process, self.focusedwindow = api_windows.execute(command, silentstart, start)
         return True
 
     def _start(self, command: str) -> bool:
@@ -45,20 +49,24 @@ class PlatformWindows(Winapi, PlatformBase, EmulatorManager):
     def _stop(self, command: str) -> bool:
         return self.__execute(command, start=False)
 
+    @staticmethod
+    def kill_process_by_regex(regex):
+        return api_windows.kill_process_by_regex(regex)
+
     def switch_window(self, hwnds=None, arg=None) -> bool:
         if isinstance(hwnds, list) and all(isinstance(h, (int, c_void_p)) for h in hwnds) and isinstance(arg, int):
             return super().switch_window(hwnds, arg)
         if self.process is None:
-            self.process = self.get_process(self.emulator_instance)
+            self.process = api_windows.get_process(self.emulator_instance)
         if not self.hwnds:
-            self.hwnds = self.get_hwnds(self.process[2])
+            self.hwnds = api_windows.get_hwnds(self.process[2])
         method = self.config.Emulator_SilentStart
         if method == 'normal':
-            arg = self.SW_SHOW
+            arg = SW_SHOW
         elif method == 'minimize':
-            arg = self.SW_MINIMIZE
+            arg = SW_MINIMIZE
         elif method == 'silent':
-            arg = self.SW_HIDE
+            arg = SW_HIDE
         else:
             from module.exception import ScriptError
             raise ScriptError("Wrong setting")
@@ -266,10 +274,10 @@ class PlatformWindows(Winapi, PlatformBase, EmulatorManager):
             break
 
         # Check emulator process and hwnds
-        self.hwnds = self.get_hwnds(self.process[2])
+        self.hwnds = api_windows.get_hwnds(self.process[2])
 
         logger.info(f'Emulator start completed')
-        logger.info(f'Emulator Process: {self.process}')
+        logger.attr('Emulator Process', self.process)
         return True
 
     def emulator_start(self):
@@ -307,13 +315,13 @@ class PlatformWindows(Winapi, PlatformBase, EmulatorManager):
     def emulator_check(self) -> bool:
         try:
             if not isinstance(self.process, PROCESS_INFORMATION):
-                self.process = self.get_process(self.emulator_instance)
+                self.process = api_windows.get_process(self.emulator_instance)
                 return True
-            cmdline = self.get_cmdline(self.process[2])
+            cmdline = api_windows.get_cmdline(self.process[2])
             if self.emulator_instance.path.lower() in cmdline.lower():
                 return True
             if not all(self.process[:2]):
-                self.close_handle(handles=self.process[:2])
+                api_windows.close_handle(handles=self.process[:2])
                 self.process = None
             raise ProcessLookupError
         except (IterationFinished, IndexError):
