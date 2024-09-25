@@ -193,7 +193,7 @@ class LDOpenGLImpl:
             if not os.path.exists(ldopengl_dll):
                 raise LDOpenGLIncompatible(
                     f'ldopengl_dll={ldopengl_dll} does not exist, '
-                    f'ldopengl requires LDPlayer >= 9.0.75, please check your version'
+                    f'ldopengl requires LDPlayer >= 9.0.78, please check your version'
                 )
             else:
                 raise LDOpenGLIncompatible(
@@ -262,6 +262,8 @@ class LDOpenGLImpl:
             int: instance_id, or None if failed to predict
         """
         serial, _ = get_serial_pair(serial)
+        if serial is None:
+            return None
         try:
             port = int(serial.split(':')[1])
         except (IndexError, ValueError):
