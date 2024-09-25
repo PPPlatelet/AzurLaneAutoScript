@@ -55,7 +55,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
     def switch_window(self, hwnds=None, arg=None) -> bool:
         if isinstance(hwnds, list) and all(isinstance(h, (int, c_void_p)) for h in hwnds) and isinstance(arg, int):
-            return super().switch_window(hwnds, arg)
+            return api_windows.switch_window(hwnds, arg)
         if self.process is None:
             self.process = api_windows.get_process(self.emulator_instance)
         if not self.hwnds:
@@ -70,7 +70,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         else:
             from module.exception import ScriptError
             raise ScriptError("Wrong setting")
-        return super().switch_window(self.hwnds, arg)
+        return api_windows.switch_window(self.hwnds, arg)
 
     def _emulator_start(self, instance: EmulatorInstance):
         """
@@ -90,7 +90,9 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             self._start(f'"{exe}" -v {instance.MuMuPlayer12_id}')
         elif instance == Emulator.LDPlayerFamily:
             # ldconsole.exe launch --index 0
-            self._start(f'"{Emulator.single_to_console(exe)}" launch --index {instance.LDPlayer_id}')
+            if instance.LDPlayer_id is None:
+                logger.warning(f'Cannot get LDPlayer instance index from name {instance.name}')
+            self._start(f'"{exe}" index={instance.LDPlayer_id}')
         elif instance == Emulator.NoxPlayerFamily:
             # Nox.exe -clone:Nox_1
             self._start(f'"{exe}" -clone:{instance.name}')
@@ -202,6 +204,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         """
         logger.info("Emulator starting...")
         logger.info(f"Current window: {self.focusedwindow[0]}")
+        logger.attr('Emulator Process', self.process)
         serial = self.emulator_instance.serial
 
         def adb_connect():
@@ -277,7 +280,6 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         self.hwnds = api_windows.get_hwnds(self.process[2])
 
         logger.info(f'Emulator start completed')
-        logger.attr('Emulator Process', self.process)
         return True
 
     def emulator_start(self):
@@ -320,7 +322,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             cmdline = api_windows.get_cmdline(self.process[2])
             if self.emulator_instance.path.lower() in cmdline.lower():
                 return True
-            if not all(self.process[:2]):
+            if all(self.process[:2]):
                 api_windows.close_handle(handles=self.process[:2])
                 self.process = None
             raise ProcessLookupError

@@ -172,8 +172,12 @@ def execute(command, silentstart, start):
         byref(lpProcessInformation)
     ),  report("Failed to start emulator", exc=EmulatorLaunchFailedError)
 
-    if not start:
-        logger.info(f"Ending process, handles are no longer used, closed.")
+    if start:
+        wait = WaitForInputIdle(lpProcessInformation[0], INFINITE)
+        assert wait == 0, \
+            report("Failed to start emulator", exc=EmulatorLaunchFailedError)
+    else:
+        logger.info(f"Close useless handles")
         close_handle(lpProcessInformation[:2])
         lpProcessInformation = None
 
@@ -431,7 +435,7 @@ def send_message_box(
     return MessageBoxIndirectW(byref(mbparams))
 
 @MSGBOXCALLBACK
-def MsgBoxCallback(lphelpinfo: LPHELPINFO):
+def MsgBoxCallback(lphelpinfo):
     if lphelpinfo.contents.dwContextId == 0x1:
         MessageBoxW(None, "0x1 help", "HELP", 0)
     elif lphelpinfo.contents.dwContextId == 0x10:

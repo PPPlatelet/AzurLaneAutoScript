@@ -83,7 +83,7 @@ def retry(func):
                     pass
 
         logger.critical(f'Retry {func.__name__}() failed')
-        raise RequestHumanTakeover
+        raise RequestHumanTakeover('Request human takeover')
 
     return retry_wrapper
 
@@ -193,7 +193,7 @@ class Hermit(Adb):
                     '2. Turn it ON and click OK\n'
                     '3. Switch back to AzurLane\n'
                 )
-                raise RequestHumanTakeover
+                raise RequestHumanTakeover('Request human takeover')
 
     @cached_property
     def hermit_session(self):
@@ -222,7 +222,7 @@ class Hermit(Adb):
             if 'GestureDescription$Builder' in result:
                 logger.error(e)
                 logger.critical('Hermit cannot run on current device, hermit requires Android>=7.0')
-                raise RequestHumanTakeover
+                raise RequestHumanTakeover('Request human takeover')
             if 'accessibilityservice' in result:
                 # Attempt to invoke virtual method
                 # 'boolean android.accessibilityservice.AccessibilityService.dispatchGesture(

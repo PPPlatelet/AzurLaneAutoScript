@@ -377,7 +377,7 @@ class OperationSiren(OSMap):
                     zone = self.name_to_zone(self.config.OpsiMeowfficerFarming_TargetZone)
                 except ScriptError:
                     logger.warning(f'wrong zone_id input:{self.config.OpsiMeowfficerFarming_TargetZone}')
-                    raise RequestHumanTakeover('wrong input, task stopped')
+                    raise RequestHumanTakeover('Request human takeover')('wrong input, task stopped')
                 else:
                     logger.hr(f'OS meowfficer farming, zone_id={zone.zone_id}', level=1)
                     self.globe_goto(zone, refresh=True)
@@ -633,7 +633,7 @@ class OperationSiren(OSMap):
         self.zone_init()
         result = self.run_abyssal()
         if not result:
-            raise RequestHumanTakeover
+            raise RequestHumanTakeover('Request human takeover')
 
         self.fleet_repair(revert=False)
         self.delay_abyssal()

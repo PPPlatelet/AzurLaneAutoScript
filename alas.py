@@ -91,50 +91,41 @@ class AzurLaneAutoScript:
             self.config.task_call('Restart')
             self.device.sleep(10)
             return False
-        except GamePageUnknownError:
+        except GamePageUnknownError as e:
             logger.info('Game server may be under maintenance or network may be broken, check server status now')
             self.checker.check_now()
             if self.checker.is_available():
                 logger.critical('Game page unknown')
                 self.save_error_log()
-                handle_notify(
-                    self.config.Error_OnePushConfig,
-                    title=f"Alas <{self.config_name}> crashed",
-                    content=f"<{self.config_name}> GamePageUnknownError",
-                )
-                exit(1)
+                self.err_exit(e)
             else:
                 self.checker.wait_until_available()
                 return False
         except ScriptError as e:
             logger.exception(e)
             logger.critical('This is likely to be a mistake of developers, but sometimes just random issues')
-            handle_notify(
-                self.config.Error_OnePushConfig,
-                title=f"Alas <{self.config_name}> crashed",
-                content=f"<{self.config_name}> ScriptError",
-            )
-            exit(1)
-        except RequestHumanTakeover:
+            self.err_exit(e)
+        except ALASBaseError as e:
             if not self.device.emulator_check():
                 self.reboot()
                 return False
-            logger.critical('Request human takeover')
-            handle_notify(
-                self.config.Error_OnePushConfig,
-                title=f"Alas <{self.config_name}> crashed",
-                content=f"<{self.config_name}> RequestHumanTakeover",
-            )
-            exit(1)
+            logger.critical(e)
+            self.err_exit(e)
         except Exception as e:
+            if not self.device.emulator_check():
+                self.reboot()
+                return False
             logger.exception(e)
             self.save_error_log()
-            handle_notify(
-                self.config.Error_OnePushConfig,
-                title=f"Alas <{self.config_name}> crashed",
-                content=f"<{self.config_name}> Exception occured",
-            )
-            exit(1)
+            self.err_exit(e)
+
+    def err_exit(self, e):
+        handle_notify(
+            self.config.Error_OnePushConfig,
+            title=f"Alas <{self.config_name}> crashed",
+            content=f"<{self.config_name}> {e.__class__.__name__}"
+        )
+        exit(1)
 
     def save_error_log(self):
         """
@@ -529,6 +520,7 @@ class AzurLaneAutoScript:
                     continue
                 if not self.device.emulator_check():
                     self.run('reboot', skip_first_screenshot=True, use_log=False)
+                    self.run('start', skip_first_screenshot=True)
             else:
                 logger.warning(f'Invalid Optimization_WhenTaskQueueEmpty: {method}, fallback to stay_there')
                 release_resources()
@@ -548,11 +540,10 @@ class AzurLaneAutoScript:
 
         while 1:
             # Check update event from GUI
-            if self.stop_event is not None:
-                if self.stop_event.is_set():
-                    logger.info("Update event detected")
-                    logger.info(f"Alas [{self.config_name}] exited.")
-                    break
+            if self.stop_event is not None and self.stop_event.is_set():
+                logger.info("Update event detected")
+                logger.info(f"Alas [{self.config_name}] exited.")
+                break
             # Check game server maintenance
             self.checker.wait_until_available()
             if self.checker.is_recovered():

@@ -150,6 +150,10 @@ CreateProcessWithLogonW.argtypes    = [
 ]
 CreateProcessWithLogonW.restype     = BOOL
 
+WaitForInputIdle                    = user32.WaitForInputIdle
+WaitForInputIdle.argtypes           = [HANDLE, DWORD]
+WaitForInputIdle.restype            = DWORD
+
 TerminateProcess                    = kernel32.TerminateProcess
 TerminateProcess.argtypes           = [HANDLE, UINT]
 TerminateProcess.restype            = BOOL
@@ -506,7 +510,6 @@ def timer(timeout: int = 1):
                 target_thread.start()
 
                 if not stop_event.wait(timeout=timeout):
-                    target_thread._stop()
                     raise TimeoutError(f"Function {path} timed out after {timeout} seconds")
 
                 if exc is not None:

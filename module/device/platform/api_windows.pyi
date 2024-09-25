@@ -22,7 +22,6 @@ def close_handle(handles: Iterable[Any], *args, fclose: Callable[[HANDLE], None]
     pass
 
 def __yield_entries(
-        
         entry32:    Union[PROCESSENTRY32W, THREADENTRY32],
         snapshot:   HANDLE,
         func:       Callable[[HANDLE, Union[LPPROCESSENTRY32W, LPTHREADENTRY32]], bool]
@@ -92,7 +91,6 @@ def set_focus_to_window(focusedwindow: Tuple[HWND, Optional[WINDOWPLACEMENT]]) -
     pass
 
 def refresh_window(
-        
         focusedwindow: Tuple[HWND, Optional[WINDOWPLACEMENT]],
         max_attempts: int = 10,
         interval: float = 0.5
@@ -112,7 +110,6 @@ def refresh_window(
     pass
 
 def execute(
-        
         command: str,
         silentstart: bool,
         start: bool
@@ -341,11 +338,11 @@ def is_running(pid: int = 0, ppid: int = 0) -> bool:
     """
     pass
 
-def MsgBoxCallback(lphelpinfo):
-    pass
-
 def send_message_box(
         text='Hello World!', caption='ALAS Message Box',
         style=None, helpid=None, callback=None,  # p=None, s=None
-):
+) -> int:
+    pass
+
+def MsgBoxCallback(lphelpinfo: LPHELPINFO) -> None:
     pass

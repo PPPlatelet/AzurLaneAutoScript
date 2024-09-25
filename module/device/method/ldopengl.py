@@ -166,7 +166,7 @@ def retry(func):
                     pass
 
         logger.critical(f'Retry {func.__name__}() failed')
-        raise RequestHumanTakeover
+        raise RequestHumanTakeover('Request human takeover')
 
     return retry_wrapper
 
@@ -298,7 +298,7 @@ class LDOpenGL(Platform):
         # installation path is E:/ProgramFiles/LDPlayer9
         if self.emulator_instance is None:
             logger.error('Unable to use LDOpenGL because emulator instance not found')
-            raise RequestHumanTakeover
+            raise RequestHumanTakeover('Request human takeover')
         try:
             return LDOpenGLImpl(
                 ld_folder=self.emulator_instance.emulator.abspath('./'),
@@ -307,7 +307,7 @@ class LDOpenGL(Platform):
         except (LDOpenGLIncompatible, LDOpenGLError) as e:
             logger.error(e)
             logger.error('Unable to initialize LDOpenGL')
-            raise RequestHumanTakeover
+            raise RequestHumanTakeover('Request human takeover')
 
     def ldopengl_available(self) -> bool:
         if not self.is_ldplayer_bluestacks_family:
