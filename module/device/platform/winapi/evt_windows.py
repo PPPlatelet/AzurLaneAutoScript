@@ -8,13 +8,13 @@ import threading
 from ctypes import WinDLL, POINTER, byref, create_unicode_buffer
 from ctypes.wintypes import HANDLE, LPCWSTR, DWORD, BOOL, LPVOID
 
-from module.device.platform.api_windows import Winapi
-from module.device.platform.winapi import Handle_, hex_or_normalize_path, WinapiFunctions
+from module.device.platform.winapi.const_windows import ERROR_SUCCESS, INVALID_HANDLE_VALUE, INFINITE
+from module.device.platform.winapi.functions_windows import \
+    GetLastError, report, IsUserAnAdmin, Handle_, hex_or_normalize_path
+from module.device.platform.api_windows import is_running, get_cmdline, terminate_process
 from module.logger import logger
 
-class Evtapi(Winapi):
-    __new__ = super(WinapiFunctions).__new__
-
+class Evtapi:
     # winevt.h line 156
     EVT_QUERY_CHANNEL_PATH          = 0x1
     EVT_QUERY_FILE_PATH             = 0x2
@@ -48,9 +48,9 @@ class Evtapi(Winapi):
     def _enum_events(self, hevent):
         event = self.EVT_HANDLE()
         returned = DWORD(0)
-        while self.EvtNext(hevent, 1, byref(event), self.INFINITE, 0, byref(returned)):
-            if event == self.INVALID_HANDLE_VALUE:
-                self.report(f"Invalid handle: 0x{event}", raise_=False)
+        while self.EvtNext(hevent, 1, byref(event), INFINITE, 0, byref(returned)):
+            if event == INVALID_HANDLE_VALUE:
+                report(f"Invalid handle: 0x{event}", raise_=False)
                 continue
 
             buffer_size = DWORD(0)
@@ -67,14 +67,14 @@ class Evtapi(Winapi):
                 byref(buffer_used),
                 byref(property_count)
             )
-            if self.GetLastError() == self.ERROR_SUCCESS:
+            if GetLastError() == ERROR_SUCCESS:
                 yield rendered_content
                 continue
 
             buffer_size = buffer_used.value
             rendered_content = create_unicode_buffer(buffer_size)
             if not rendered_content:
-                self.report("malloc failed.", raise_=False)
+                report("malloc failed.", raise_=False)
                 continue
 
             if not self.EvtRender(
@@ -86,10 +86,10 @@ class Evtapi(Winapi):
                     byref(buffer_used),
                     byref(property_count)
             ):
-                self.report(f"EvtRender failed with {self.GetLastError()}", raise_=False)
+                report(f"EvtRender failed with {GetLastError()}", raise_=False)
                 continue
 
-            if self.GetLastError() == self.ERROR_SUCCESS:
+            if GetLastError() == ERROR_SUCCESS:
                 yield rendered_content.value
 
             self.EvtClose(event)
@@ -233,8 +233,8 @@ class ProcessManager(Evtapi):
 
     async def grab_pids(self):
         try:
-            if not self.IsUserAnAdmin():
-                self.report("Currently not running in administrator mode", statuscode=self.GetLastError())
+            if not IsUserAnAdmin():
+                report("Currently not running in administrator mode", statuscode=GetLastError())
             with evt_query() as hevent:
                 for content in self._enum_events(hevent):
                     data = self.evttree.parse_event(content)
@@ -258,9 +258,9 @@ class ProcessManager(Evtapi):
             for node in evtiter:
                 if node.data != data:
                     continue
-                if self.is_running(node.data.process_id, data.process_id):
+                if is_running(node.data.process_id, data.process_id):
                     break
-                cmdline = self.get_cmdline(data.process_id)
+                cmdline = get_cmdline(data.process_id)
                 if data.process_name not in cmdline:
                     continue
                 node.add_children(data)
@@ -277,7 +277,7 @@ class ProcessManager(Evtapi):
         with self.lock:
             evtiter = self.evttree.post_order_traversal(self.evttree.root)
             for node in evtiter:
-                self.terminate_process(node.data.process_id)
+                terminate_process(node.data.process_id)
             self.datas = []
             self.evttree = EventTree()
 

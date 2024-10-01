@@ -2,6 +2,7 @@ import re
 from typing import Generator, Iterable
 from shlex import split as split_
 from os.path import dirname
+import threading
 
 from ctypes import addressof, byref, create_unicode_buffer, sizeof, wstring_at
 
@@ -10,8 +11,7 @@ from module.device.platform.winapi import *
 from module.base.timer import Timer
 from module.logger import logger
 
-# TODO:Send MessageBox
-# TODO:Send Notify
+_lock = threading.Lock()
 
 def close_handle(handles: Iterable[Any], *args, fclose=None):
     from itertools import chain
@@ -42,25 +42,27 @@ def close_handle(handles: Iterable[Any], *args, fclose=None):
 
 def __yield_entries(entry32, snapshot, func):
     while 1:
+        if not func(snapshot, byref(entry32)):
+            break
         yield entry32
-        if func(snapshot, byref(entry32)):
-            continue
 
-        # Finished querying
-        errcode = GetLastError()
-        assert errcode == ERROR_NO_MORE_FILES, report(f"{func.__name__} failed", status=errcode)
-        report("Finished querying", status=errcode, use_log=False, exc=IterationFinished)
+    # Finished querying
+    errcode = GetLastError()
+    assert errcode == ERROR_NO_MORE_FILES, report(f"{func.__name__} failed", status=errcode)
+    report("Finished querying", status=errcode, use_log=False, exc=IterationFinished)
 
 def _enum_processes() -> Generator[PROCESSENTRY32W, None, None]:
     lppe32 = PROCESSENTRY32W(sizeof(PROCESSENTRY32W))
     with create_snapshot(TH32CS_SNAPPROCESS) as snapshot:
         assert Process32First(snapshot, byref(lppe32)), report("Process32First failed")
+        yield lppe32
         yield from __yield_entries(lppe32, snapshot, Process32Next)
 
 def _enum_threads() -> Generator[THREADENTRY32, None, None]:
     lpte32 = THREADENTRY32(sizeof(THREADENTRY32))
     with create_snapshot(TH32CS_SNAPTHREAD) as snapshot:
         assert Thread32First(snapshot, byref(lpte32)), report("Thread32First failed")
+        yield lpte32
         yield from __yield_entries(lpte32, snapshot, Thread32Next)
 
 def get_focused_window():
@@ -86,29 +88,33 @@ def set_focus_to_window(focusedwindow):
 def refresh_window(focusedwindow, max_attempts=10, interval=0.5):
     from itertools import combinations
 
-    attempts = 0
-    prevwindow = None
+    with _lock:
+        attempts = 0
+        prevwindow = None
 
-    unique = lambda *args: all(x[0].value != y[0].value for x, y in combinations(args, 2))
-    interval = Timer(interval).start()
+        unique = lambda *args: all(x[0].value != y[0].value for x, y in combinations(args, 2))
+        interval = Timer(interval).start()
 
-    while attempts < max_attempts:
-        currentwindow = get_focused_window()
-        if prevwindow and unique(currentwindow, prevwindow, focusedwindow):
-            break
+        while attempts < max_attempts:
+            currentwindow = get_focused_window()
+            if prevwindow and unique(currentwindow, prevwindow, focusedwindow):
+                break
 
-        if unique(focusedwindow, currentwindow):
-            logger.info(f"Current window is {currentwindow[0]}, flash back to {focusedwindow[0]}")
-            set_focus_to_window(focusedwindow)
+            if unique(focusedwindow, currentwindow):
+                logger.info(f"Current window is {currentwindow[0]}, flash back to {focusedwindow[0]}")
+                set_focus_to_window(focusedwindow)
+                attempts += 1
+                interval.wait()
+                interval.reset()
+                continue
+
             attempts += 1
             interval.wait()
             interval.reset()
 
-        attempts += 1
-        interval.wait()
-        interval.reset()
+            prevwindow = currentwindow
 
-        prevwindow = currentwindow
+        del focusedwindow, currentwindow, prevwindow
 
 def execute(command, silentstart, start):
     # TODO:Create Process with non-administrator privileges
@@ -372,67 +378,34 @@ def is_running(pid=0, ppid=0):
         return False
     return True
 
-def is_user_admin():
-    nt_authority    = (c_byte * 6)
-    nt_authority[:] = 0,0,0,0,0,SECURITY_NT_AUTHORITY.value
-    admins_group    = c_void_p()
-
-    assert AllocateAndInitializeSid(
-        byref(nt_authority),
-        2,
-        SECURITY_BUILTIN_DOMAIN_RID,
-        DOMAIN_ALIAS_RID_ADMINS,
-        0, 0, 0, 0, 0, 0,
-        byref(admins_group)
-    ), report("Failed to allocate and initialize SID")
-
-    is_admin = BOOL()
-    if not CheckTokenMembership(None, admins_group, byref(is_admin)):
-        report("Failed to check token membership", level=30, r_exc=False)
-        return False
-
-    FreeSid(admins_group)
-
-    return is_admin.value == 1
-
-def set_privilege(hToken, lpszPrivilege, bEnablePrivilege):
-    tp = TOKEN_PRIVILEGES(1)
-    luid = LUID()
-
-    if not LookupPrivilegeValueW(None, lpszPrivilege, byref(luid)):
-        report("Failed to lookup privilege value", level=30, r_exc=False)
-        return
-
-    tp.Privileges[0].Luid = luid
-    tp.Privileges[0].Attributes = (SE_PRIVILEGE_ENABLED if bEnablePrivilege else 0)
-
-    assert AdjustTokenPrivileges(hToken, False, byref(tp), sizeof(tp), None, None), \
-        report("Failed to adjust token privileges")
-
 def send_message_box(
-        text='Hello World!', caption='ALAS Message Box',
-        style=None, helpid=None, callback=None,  # p=None, s=None
+        text='Hello World!', caption='ALAS Message Box', style=None,
+        helpid=None, callback=None, p=None, s=None
 ):
-    pid = GetCurrentProcessId()
     try:
-        hwnds = get_hwnds(pid)
+        hwnds = get_hwnds(GetCurrentProcessId())
         hwndOwner = next((hwnd for hwnd in hwnds if GetWindow(hwnd, GW_CHILD)), None)
     except HwndNotFoundError:
         # TODO:CreateWindowExW
         hwndOwner = None
+
     if style is None:
         style = MB_YESNOCANCEL | MB_ICONINFORMATION
-    if style & MB_USERICON == MB_USERICON:
-        # TODO:set icon
-        pass
-    mbparams = MSGBOXPARAMSW(sizeof(MSGBOXPARAMSW), hwndOwner, None, text, caption, style)
-    if isinstance(helpid, int) and callable(callback):
-        mbparams[7:9] = helpid, callback
-    """
+
+    mbparams = MSGBOXPARAMSW(sizeof(MSGBOXPARAMSW), hwndOwner, GetModuleHandleW(None), text, caption, style)
+
+    if style & MB_HELP == MB_HELP:
+        if isinstance(helpid, int) and callable(callback):
+            mbparams[7:9] = helpid, callback
+        else:
+            mbparams[8] = None
+
     if all(isinstance(i, int) for i in (p, s)):
         mbparams.dwLanguageId = (s & 0xffff) << 10 | (p & 0xffff)
-    """
-    return MessageBoxIndirectW(byref(mbparams))
+
+    result = MessageBoxIndirectW(byref(mbparams))
+
+    return result
 
 @MSGBOXCALLBACK
 def MsgBoxCallback(lphelpinfo):
@@ -446,5 +419,8 @@ def MsgBoxCallback(lphelpinfo):
         MessageBoxW(None, "Default help", "HELP", 0)
 
 if __name__ == '__main__':
-    ret = send_message_box(style=MB_HELP | MB_YESNOCANCEL | MB_ICONERROR, helpid=0x10, callback=MsgBoxCallback)
+    ret = send_message_box(
+        style=MB_HELP | MB_YESNOCANCEL | MB_ICONERROR,
+        helpid=0x10, callback=MsgBoxCallback
+    )
     print(ret)

@@ -95,35 +95,36 @@ class AzurLaneAutoScript:
             logger.info('Game server may be under maintenance or network may be broken, check server status now')
             self.checker.check_now()
             if self.checker.is_available():
-                logger.critical('Game page unknown')
-                self.save_error_log()
-                self.err_exit(e)
-            else:
-                self.checker.wait_until_available()
-                return False
+                self.crash_exit(e, save=True)
+            self.checker.wait_until_available()
+            return False
         except ScriptError as e:
-            logger.exception(e)
-            logger.critical('This is likely to be a mistake of developers, but sometimes just random issues')
-            self.err_exit(e)
+            self.crash_exit(e, 'This is likely to be a mistake of developers, but sometimes just random issues',
+                            log_exc=True)
         except ALASBaseError as e:
             if not self.device.emulator_check():
                 self.reboot()
                 return False
-            logger.critical(e)
-            self.err_exit(e)
+            self.crash_exit(e)
         except Exception as e:
             if not self.device.emulator_check():
                 self.reboot()
                 return False
-            logger.exception(e)
-            self.save_error_log()
-            self.err_exit(e)
+            self.crash_exit(e, log_exc=True, save=True)
 
-    def err_exit(self, e):
+    def crash_exit(self, e, *args, log_exc=False, save=False, msg=''):
+        if log_exc:
+            logger.exception(e)
+        else:
+            logger.critical(e)
+        for arg in args:
+            logger.critical(arg)
+        if save:
+            self.save_error_log()
         handle_notify(
             self.config.Error_OnePushConfig,
             title=f"Alas <{self.config_name}> crashed",
-            content=f"<{self.config_name}> {e.__class__.__name__}"
+            content=f"<{self.config_name}> {e.__class__.__name__}{msg}"
         )
         exit(1)
 
@@ -589,13 +590,8 @@ class AzurLaneAutoScript:
                                 "Please read the help text of the options.")
                 logger.critical("Possible reason #2: There is a problem with this task. "
                                 "Please contact developers or try to fix it yourself.")
-                logger.critical('Request human takeover')
-                handle_notify(
-                    self.config.Error_OnePushConfig,
-                    title=f"Alas <{self.config_name}> crashed",
-                    content=f"<{self.config_name}> RequestHumanTakeover\nTask `{task}` failed 3 or more times.",
-                )
-                exit(1)
+                self.crash_exit(RequestHumanTakeover('Request human takeover'),
+                                msg=f"\nTask `{task}` failed 3 or more times.")
 
             if success:
                 del_cached_property(self, 'config')

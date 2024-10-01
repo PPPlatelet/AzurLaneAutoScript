@@ -106,8 +106,6 @@ class Device(Screenshot, Control, AppControl):
             if self.config.Emulator_ControlMethod == 'minitouch':
                 self.early_minitouch_init()
 
-        self.switch_window()
-
     def run_simple_screenshot_benchmark(self):
         """
         Perform a screenshot method benchmark, test 3 times on each method.

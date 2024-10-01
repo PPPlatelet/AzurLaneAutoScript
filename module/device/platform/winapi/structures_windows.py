@@ -141,7 +141,7 @@ class Structure(_Structure):
 
     def __repr__(self):
         field_values = ', '.join(f"{name}={getattr(self, name)!r}" for name in self.field_name)
-        return f"{self.__class__.__name__}({field_values})"
+        return f"{self.__class__.__name__}<{field_values}>"
 
     def __str__(self):
         field_values = ', '.join(f"{name}={getattr(self, name)}" for name in self.field_name)
