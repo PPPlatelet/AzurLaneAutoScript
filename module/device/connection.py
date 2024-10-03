@@ -18,7 +18,7 @@ from module.device.env import IS_LINUX, IS_MACINTOSH, IS_WINDOWS
 from module.device.method.utils import (PackageNotInstalled, RETRY_TRIES, get_serial_pair, handle_adb_error,
                                         handle_unknown_host_service, possible_reasons, random_port, recv_all,
                                         remove_shell_warning, retry_sleep)
-from module.exception import RequestHumanTakeover, EmulatorNotRunningError
+from module.exception import EmulatorNotRunningError, RequestHumanTakeover
 from module.logger import logger
 from module.map.map_grids import SelectedGrids
 
@@ -109,7 +109,6 @@ class Connection(ConnectionAttr):
             config (AzurLaneConfig, str): Name of the user config under ./config
         """
         super().__init__(config)
-
         if not self.is_over_http:
             self.detect_device()
 

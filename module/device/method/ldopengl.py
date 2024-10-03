@@ -248,7 +248,6 @@ class LDOpenGLImpl:
         image = np.ctypeslib.as_array(img).reshape((height, width, 3))
         return image
 
-
     @staticmethod
     def serial_to_id(serial: str):
         """
@@ -328,6 +327,7 @@ class LDOpenGL(Platform):
         image = cv2.flip(image, 0)
         cv2.cvtColor(image, cv2.COLOR_BGR2RGB, dst=image)
         return image
+
 
 if __name__ == '__main__':
     ld = LDOpenGLImpl('E:/ProgramFiles/LDPlayer9', instance_id=1)
