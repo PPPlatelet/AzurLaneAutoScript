@@ -1,15 +1,26 @@
 import re
-from typing import Generator, Iterable
+from typing import Any, Generator, Iterable
 from shlex import split as split_
 from os.path import dirname
 import threading
 
 from ctypes import addressof, byref, create_unicode_buffer, sizeof, wstring_at
+from ctypes.wintypes import HWND, LPARAM, DWORD, ULONG
 
 from module.device.platform.emulator_windows import Emulator
 from module.device.platform.winapi import *
 from module.base.timer import Timer
 from module.logger import logger
+
+__all__ = [
+    'close_handle', '__yield_entries', '_enum_processes', '_enum_threads',
+    'get_focused_window', 'set_focus_to_window', 'refresh_window',
+    'execute', 'terminate_process', 'get_hwnds', 'get_cmdline',
+    'kill_process_by_regex', '__get_time', '_get_process_creation_time',
+    '_get_thread_creation_time', 'get_thread', '_get_process', 'get_process',
+    'switch_window', 'get_parent_pid', 'get_exit_code', 'is_running',
+    'send_message_box'
+]
 
 _lock = threading.Lock()
 
@@ -52,15 +63,13 @@ def __yield_entries(entry32, snapshot, func):
     report("Finished querying", status=errcode, use_log=False, exc=IterationFinished)
 
 def _enum_processes() -> Generator[PROCESSENTRY32W, None, None]:
-    lppe32 = PROCESSENTRY32W(sizeof(PROCESSENTRY32W))
-    with create_snapshot(TH32CS_SNAPPROCESS) as snapshot:
+    with create_snapshot(TH32CS_SNAPPROCESS) as snapshot, PROCESSENTRY32W(sizeof(PROCESSENTRY32W)) as lppe32:
         assert Process32First(snapshot, byref(lppe32)), report("Process32First failed")
         yield lppe32
         yield from __yield_entries(lppe32, snapshot, Process32Next)
 
 def _enum_threads() -> Generator[THREADENTRY32, None, None]:
-    lpte32 = THREADENTRY32(sizeof(THREADENTRY32))
-    with create_snapshot(TH32CS_SNAPTHREAD) as snapshot:
+    with create_snapshot(TH32CS_SNAPTHREAD) as snapshot, THREADENTRY32(sizeof(THREADENTRY32)) as lpte32:
         assert Thread32First(snapshot, byref(lpte32)), report("Thread32First failed")
         yield lpte32
         yield from __yield_entries(lpte32, snapshot, Thread32Next)
@@ -147,24 +156,7 @@ def execute(command, silentstart, start):
     else:
         lpStartupInfo.wShowWindow = SW_HIDE
     lpProcessInformation        = PROCESS_INFORMATION()
-    """
-    TokenHandle = HANDLE()
-    assert OpenProcessToken(
-        GetCurrentProcess(),
-        TOKEN_DUPLICATE | TOKEN_QUERY,
-        byref(TokenHandle)
-    ), report("Failed to open process token", exc=EmulatorLaunchFailedError)
 
-    DuplicateTokenHandle = HANDLE()
-    assert DuplicateTokenEx(
-        TokenHandle,
-        MAXIMUM_ALLOWED,
-        None,
-        SECURITY_IMPERSONATION,
-        TOKEN_PRIMARY,
-        byref(DuplicateTokenHandle)
-    ), report("Failed to duplicate token", exc=EmulatorLaunchFailedError)
-    """
     assert CreateProcessW(
         lpApplicationName,
         lpCommandLine,
@@ -186,8 +178,6 @@ def execute(command, silentstart, start):
         logger.info(f"Close useless handles")
         close_handle(lpProcessInformation[:2])
         lpProcessInformation = None
-
-    # close_handle((), TokenHandle, DuplicateTokenHandle)
 
     return lpProcessInformation, focusedwindow
 
@@ -385,7 +375,7 @@ def send_message_box(
     try:
         hwnds = get_hwnds(GetCurrentProcessId())
         hwndOwner = next((hwnd for hwnd in hwnds if GetWindow(hwnd, GW_CHILD)), None)
-    except HwndNotFoundError:
+    except (HwndNotFoundError, StopIteration):
         # TODO:CreateWindowExW
         hwndOwner = None
 

@@ -6,6 +6,14 @@ from ctypes import \
     c_wchar, c_wchar_p, c_void_p, c_ubyte, c_byte, c_long, c_ulong
 from ctypes.wintypes import MAX_PATH, FILETIME as _FILETIME
 
+__all__ = [
+    'WinApiBaseException', 'EmulatorLaunchFailedError', 'HwndNotFoundError', 'IterationFinished',
+    'Structure', 'PROCESS_INFORMATION', 'STARTUPINFOW', 'SECURITY_ATTRIBUTES',
+    'PROCESSENTRY32W', 'THREADENTRY32', 'POINT', 'RECT', 'WINDOWPLACEMENT',
+    'UNICODE_STRING', 'RTL_USER_PROCESS_PARAMETERS', 'PEB', 'PROCESS_BASIC_INFORMATION',
+    'FILETIME', 'TIMEINFO', 'HELPINFO', 'LPHELPINFO', 'MSGBOXCALLBACK', 'MSGBOXPARAMSW'
+]
+
 class WinApiBaseException(Exception): ...
 
 class EmulatorLaunchFailedError(WinApiBaseException): ...
@@ -52,7 +60,7 @@ class Structure(_Structure):
         def bool_obj(v, *objs):
             if isinstance(v, str):
                 return v != '\x00'
-            return any(isinstance(v, objs) and bool(v))
+            return any(isinstance(v, obj) for obj in objs and bool(v))
         def bool_ptr(val):
             try:
                 return bool(val.contents.value)
@@ -120,8 +128,7 @@ class Structure(_Structure):
             values = [getattr(self, name) for name in self.field_name]
             return ', '.join(
                 f"{name}={prefix}" + f"{value:{format_spec}}"
-                if isinstance(value, int)
-                else f"{name}={value}"
+                if isinstance(value, int) else f"{name}={value}"
                 for name, value in zip(self.field_name, values)
             )
 
@@ -150,6 +157,11 @@ class Structure(_Structure):
     def __iter__(self):
         for name in self.field_name:
             yield name, getattr(self, name)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb): ...
 
 # processthreadsapi.h line 28
 class PROCESS_INFORMATION(Structure):
@@ -284,37 +296,6 @@ class TIMEINFO(Structure):
         ("ExitTime",        FILETIME),
         ("KernelTime",      FILETIME),
         ("UserTime",        FILETIME)
-    ]
-
-class SID_IDENTIFIER_AUTHORITY(Structure):
-    _fields_ = [
-        ("Value",   c_ubyte * 6),
-    ]
-
-class SID(Structure):
-    _fields_ = [
-        ("Revision",            c_byte),
-        ("SubAuthorityCount",   c_byte),
-        ("IdentifierAuthority", SID_IDENTIFIER_AUTHORITY),
-        ("SubAuthority",        c_ulong * 1),
-    ]
-
-class LUID(Structure):
-    _fields_ = [
-        ("LowPart",     c_ulong),
-        ("HighPart",    c_long),
-    ]
-
-class LUID_AND_ATTRIBUTES(Structure):
-    _fields_ = [
-        ("Luid",        LUID),
-        ("Attributes",  c_ulong),
-    ]
-
-class TOKEN_PRIVILEGES(Structure):
-    _fields_ = [
-        ("PrivilegeCount",    c_ulong),
-        ("Privileges",        LUID_AND_ATTRIBUTES * 1),
     ]
 
 class HELPINFO(Structure):

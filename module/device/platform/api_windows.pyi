@@ -1,4 +1,7 @@
-from typing import Generator, Iterable, List, NewType, Tuple
+from typing import Any, Callable, Generator, Iterable, List, NewType, Optional, Tuple, Union
+
+from ctypes import POINTER
+from ctypes.wintypes import HANDLE, HWND
 
 from module.device.platform.emulator_windows import EmulatorInstance
 from module.device.platform.winapi import *
@@ -202,15 +205,27 @@ def __get_time(
         select:         int = 0
 ) -> Optional[int]:
     """
+    Retrieves the time information for a specified process or thread.
+
+    This function opens a handle to the specified process or thread and retrieves
+    its time information, including creation time, exit time, kernel time, and user time.
+
     Args:
-        fopen (callable):
-        fgettime (callable):
-        access (int):
-        identification (int):
-        select (int):
+        fopen (function): A function used to open a handle to a process or thread.
+        fgettime (function): A function used to retrieve time information from the handle.
+        access (int): The access rights for the handle.
+        identification (int): The identifier of the process or thread.
+        select (int, optional): Index to select specific time information to return.
+                                Default is 0, which corresponds to creation time.
 
     Returns:
-        int:
+        int: The selected time information as an integer.
+             Returns None if the time information could not be retrieved.
+
+    This function is intended to be used for obtaining timing information about
+    either processes or threads, depending on the provided `fopen` and `fgettime`
+    functions. The `select` parameter allows the caller to specify which time
+    information to return.
     """
     pass
 
@@ -272,7 +287,7 @@ def _get_process(pid: int) -> PROCESS_INFORMATION:
     """
     pass
 
-def get_process(instance: EmulatorInstance) -> PROCESS_INFORMATION:
+def get_process(instance: Optional[EmulatorInstance]) -> PROCESS_INFORMATION:
     """
     Get PROCESS_INFORMATION Structure of the process.
 
@@ -339,10 +354,42 @@ def is_running(pid: int = 0, ppid: int = 0) -> bool:
     pass
 
 def send_message_box(
-        text='Hello World!', caption='ALAS Message Box',
-        style=None, helpid=None, callback=None,  # p=None, s=None
+        text: str = 'Hello World!',
+        caption: str = 'ALAS Message Box',
+        style: int = None,
+        helpid: int = None,
+        callback: Callable[[LPHELPINFO], None] = None,
+        p: int = None,
+        s: int = None
 ) -> int:
+    """
+    Displays a message box with the specified information.
+
+    Args:
+        text (str): The message to display.
+        caption (str): The title of the message box.
+        style (int): The style of the message box.
+        helpid (int): The help ID for help context.
+        callback (function): A callback function that can be executed when help is invoked.
+        p (int): Part of the language parameter.
+        s (int): Part of the language parameter
+
+    Returns:
+        int: The result of the message box, representing the user's choice.
+
+    Raises:
+        OSError: If EnumWindows failed.
+    """
     pass
 
 def MsgBoxCallback(lphelpinfo: LPHELPINFO) -> None:
+    """
+    Help callback function that displays context-sensitive help information.
+    This function is just an example function. Please modify it to suit your needs.
+
+    Args:
+        lphelpinfo (LPHELPINFO): Pointer to the help information structure containing context ID.
+
+    Displays the corresponding help message box based on the context ID.
+    """
     pass

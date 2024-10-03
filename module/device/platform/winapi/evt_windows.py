@@ -50,7 +50,7 @@ class Evtapi:
         returned = DWORD(0)
         while self.EvtNext(hevent, 1, byref(event), INFINITE, 0, byref(returned)):
             if event == INVALID_HANDLE_VALUE:
-                report(f"Invalid handle: 0x{event}", raise_=False)
+                report(f"Invalid handle: 0x{event}", r_exc=False)
                 continue
 
             buffer_size = DWORD(0)
@@ -74,7 +74,7 @@ class Evtapi:
             buffer_size = buffer_used.value
             rendered_content = create_unicode_buffer(buffer_size)
             if not rendered_content:
-                report("malloc failed.", raise_=False)
+                report("malloc failed.", r_exc=False)
                 continue
 
             if not self.EvtRender(
@@ -86,7 +86,7 @@ class Evtapi:
                     byref(buffer_used),
                     byref(property_count)
             ):
-                report(f"EvtRender failed with {GetLastError()}", raise_=False)
+                report(f"EvtRender failed with {GetLastError()}", r_exc=False)
                 continue
 
             if GetLastError() == ERROR_SUCCESS:
@@ -234,7 +234,7 @@ class ProcessManager(Evtapi):
     async def grab_pids(self):
         try:
             if not IsUserAnAdmin():
-                report("Currently not running in administrator mode", statuscode=GetLastError())
+                report("Currently not running in administrator mode", status=GetLastError())
             with evt_query() as hevent:
                 for content in self._enum_events(hevent):
                     data = self.evttree.parse_event(content)

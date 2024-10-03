@@ -133,7 +133,7 @@ class Campaign(CampaignBase):
 
                 fleet_location = self.__getattribute__(f'fleet_{fleet_index}_location')
                 if fleet_location not in [src, dst]:
-                    raise RequestHumanTakeover('Request human takeover')(
+                    raise RequestHumanTakeover(
                         f'Fleet{fleet_index} fail to move {src} -> {dst}, now on {fleet_location}')
                 elif fleet_location == dst:
                     break

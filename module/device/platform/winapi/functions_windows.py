@@ -6,114 +6,43 @@ from ctypes.wintypes import \
     HANDLE, DWORD, HWND, BOOL, INT, UINT, \
     LONG, ULONG, LPWSTR, LPCWSTR, \
     LPVOID, LPCVOID, LPARAM, PULONG, \
-    BYTE, PDWORD, PBOOL, PHANDLE, HMODULE
+    PDWORD, HMODULE
 
 from module.device.platform.winapi.structures_windows import \
     SECURITY_ATTRIBUTES, STARTUPINFOW, WINDOWPLACEMENT, \
     PROCESS_INFORMATION, PROCESSENTRY32W, THREADENTRY32, \
-    FILETIME, SID_IDENTIFIER_AUTHORITY, SID, LUID, TOKEN_PRIVILEGES, MSGBOXPARAMSW
+    FILETIME, MSGBOXPARAMSW
 from module.logger import logger
+
+__all__ = [
+    'user32', 'kernel32', 'ntdll', 'shell32',
+    'IsUserAnAdmin', 'GetCurrentProcessId', 'CreateProcessW',
+    'WaitForInputIdle', 'TerminateProcess', 'GetForegroundWindow',
+    'SetForegroundWindow', 'GetWindowPlacement', 'SetWindowPlacement',
+    'ShowWindow', 'GetWindow', 'EnumWindowsProc', 'EnumWindows',
+    'GetWindowThreadProcessId', 'OpenProcess', 'OpenThread',
+    'CreateToolhelp32Snapshot', 'CloseHandle', 'Process32First',
+    'Process32Next', 'Thread32First', 'Thread32Next', 'GetProcessTimes',
+    'GetThreadTimes', 'GetExitCodeProcess', 'GetLastError',
+    'ReadProcessMemory', 'NtQueryInformationProcess', 'MessageBoxW',
+    'MessageBoxIndirectW', 'GetModuleHandleW',
+    'report', 'Handle_', 'ProcessHandle', 'ThreadHandle', 'CreateSnapshot',
+    'open_process', 'open_thread', 'create_snapshot',
+    'hex_or_normalize_path', 'get_callable_path'
+]
 
 user32      = WinDLL(name='user32',     use_last_error=True)
 kernel32    = WinDLL(name='kernel32',   use_last_error=True)
 ntdll       = WinDLL(name='ntdll',      use_last_error=True)
 shell32     = WinDLL(name='shell32',    use_last_error=True)
-advapi32    = WinDLL(name='advapi32',   use_last_error=True)
 
 IsUserAnAdmin                       = shell32.IsUserAnAdmin
 IsUserAnAdmin.argtypes              = []
 IsUserAnAdmin.restype               = BOOL
 
-OpenProcessToken                    = advapi32.OpenProcessToken
-OpenProcessToken.argtypes           = [HANDLE, DWORD, POINTER(HANDLE)]
-OpenProcessToken.restype            = BOOL
-
-DuplicateTokenEx                    = advapi32.DuplicateTokenEx
-DuplicateTokenEx.argtypes           = [
-    HANDLE,
-    DWORD,
-    POINTER(SECURITY_ATTRIBUTES),
-    ULONG,
-    ULONG,
-    PHANDLE
-]
-DuplicateTokenEx.restype            = LONG
-
-AllocateAndInitializeSid            = advapi32.AllocateAndInitializeSid
-AllocateAndInitializeSid.argtypes   = [
-    POINTER(SID_IDENTIFIER_AUTHORITY),
-    BYTE,
-    DWORD,
-    DWORD,
-    DWORD,
-    DWORD,
-    DWORD,
-    DWORD,
-    DWORD,
-    DWORD,
-    PBOOL
-]
-
-CheckTokenMembership                = advapi32.CheckTokenMembership
-CheckTokenMembership.argtypes       = [HANDLE, POINTER(SID), PBOOL]
-CheckTokenMembership.restype        = BOOL
-
-FreeSid                             = advapi32.FreeSid
-FreeSid.argtypes                    = [POINTER(SID)]
-FreeSid.restype                     = LPVOID
-
-AdjustTokenPrivileges               = advapi32.AdjustTokenPrivileges
-AdjustTokenPrivileges.argtypes      = [
-    HANDLE,
-    BOOL,
-    POINTER(TOKEN_PRIVILEGES),
-    DWORD,
-    POINTER(TOKEN_PRIVILEGES),
-    PDWORD
-]
-AdjustTokenPrivileges.restype       = BOOL
-
-GetCurrentProcess                   = kernel32.GetCurrentProcess
-GetCurrentProcess.argtypes          = []
-GetCurrentProcess.restype           = HANDLE
-
 GetCurrentProcessId                 = kernel32.GetCurrentProcessId
 GetCurrentProcessId.argtypes        = []
 GetCurrentProcessId.restype         = DWORD
-
-LookupPrivilegeValueW               = advapi32.LookupPrivilegeValueW
-LookupPrivilegeValueW.argtypes      = [LPCWSTR, LPCWSTR, POINTER(LUID)]
-LookupPrivilegeValueW.restype       = BOOL
-
-CreateProcessWithTokenW             = advapi32.CreateProcessWithTokenW
-CreateProcessWithTokenW.argtypes    = [
-    HANDLE,
-    DWORD,
-    LPCWSTR,
-    LPWSTR,
-    DWORD,
-    LPVOID,
-    LPCWSTR,
-    POINTER(STARTUPINFOW),
-    POINTER(PROCESS_INFORMATION)
-]
-CreateProcessWithTokenW.restype     = BOOL
-
-CreateProcessAsUserW                = advapi32.CreateProcessAsUserW
-CreateProcessAsUserW.argtypes       = [
-    HANDLE,
-    LPCWSTR,
-    LPWSTR,
-    POINTER(SECURITY_ATTRIBUTES),
-    POINTER(SECURITY_ATTRIBUTES),
-    BOOL,
-    DWORD,
-    LPVOID,
-    LPCWSTR,
-    POINTER(STARTUPINFOW),
-    POINTER(PROCESS_INFORMATION)
-]
-CreateProcessAsUserW.restype        = BOOL
 
 CreateProcessW                      = kernel32.CreateProcessW
 CreateProcessW.argtypes             = [
@@ -129,22 +58,6 @@ CreateProcessW.argtypes             = [
     POINTER(PROCESS_INFORMATION)
 ]
 CreateProcessW.restype              = BOOL
-
-CreateProcessWithLogonW             = advapi32.CreateProcessWithLogonW
-CreateProcessWithLogonW.argtypes    = [
-    LPCWSTR,                        # lpUsername
-    LPCWSTR,                        # lpDomain
-    LPCWSTR,                        # lpPassword
-    DWORD,                          # dwLogonFlags
-    LPCWSTR,                        # lpApplicationName
-    LPWSTR,                         # lpCommandLine
-    DWORD,                          # dwCreationFlags
-    LPVOID,                         # lpEnvironment
-    LPCWSTR,                        # lpCurrentDirectory
-    POINTER(STARTUPINFOW),          # lpStartupInfo
-    POINTER(PROCESS_INFORMATION)    # lpProcessInformation
-]
-CreateProcessWithLogonW.restype     = BOOL
 
 WaitForInputIdle                    = user32.WaitForInputIdle
 WaitForInputIdle.argtypes           = [HANDLE, DWORD]
@@ -164,6 +77,7 @@ SetForegroundWindow.restype         = BOOL
 GetWindowPlacement                  = user32.GetWindowPlacement
 GetWindowPlacement.argtypes         = [HWND, POINTER(WINDOWPLACEMENT)]
 GetWindowPlacement.restype          = BOOL
+
 SetWindowPlacement                  = user32.SetWindowPlacement
 SetWindowPlacement.argtypes         = [HWND, POINTER(WINDOWPLACEMENT)]
 SetWindowPlacement.restype          = BOOL
@@ -390,36 +304,40 @@ def create_snapshot(access: int, use_log: bool = False, r_exc: bool = True) -> C
 def hex_or_normalize_path(input_str: str) -> Union[int, str]:
     """
     Args:
-        input_str (str):
+        input_str (str): The input string.
 
     Returns:
-        (int | str):
+        Union[int, str]: The input string as an integer if it is a valid hex number,
+            otherwise the input string with backslashes replaced with forward slashes and double quotes removed.
     """
     try:
         return int(input_str, 16)
     except ValueError:
         return input_str.replace(r"\\", "/").replace("\\", "/").replace('\"', '"')
 
-def get_func_path(func: Callable[..., Any]) -> str:
+def get_callable_path(_callable: Callable[..., Any]) -> str:
     """
-    Get a function's relative path.
+    Get the relative path of a callable.
 
     Args:
-        func (Callable[..., Any]):
+        _callable (Callable[..., Any]):
 
     Examples:
-        >>> get_func_path(report)
+        >>> get_callable_path(report)
         'module.device.platform.winapi.functions_windows.report'
-        >>> get_func_path(FILETIME.__init_subclass__)
+        >>> get_callable_path(FILETIME.__init_subclass__)
         'module.device.platform.winapi.structures_windows.Structure::__init_subclass__'
+        >>> get_callable_path(lambda x: x)
+        '__main__.<lambda>'
+
 
     Returns:
-        str:
+        str: Functions's relative path.
     """
-    if not callable(func):
-        raise TypeError(f"Expected a callable, but got {type(func).__name__}")
+    if not callable(_callable):
+        raise TypeError(f"Expected a callable, but got `{type(_callable).__name__}`")
 
-    module = getattr(func, '__module__', '')
-    qualname = getattr(func, '__qualname__', getattr(func, '__name__', '')).replace('.', '::')
+    module = getattr(_callable, '__module__', '')
+    qualname = getattr(_callable, '__qualname__', getattr(_callable, '__name__', '')).replace('.', '::')
 
     return '.'.join(filter(lambda x: x != '', [module, qualname]))

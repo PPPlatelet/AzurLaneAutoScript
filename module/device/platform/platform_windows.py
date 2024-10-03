@@ -1,5 +1,5 @@
 from ctypes import c_void_p
-from typing import Callable
+from typing import Callable, Optional
 
 from module.base.decorator import run_once
 from module.base.timer import Timer
@@ -22,7 +22,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
     # Quadruple, contains the kernel process object, kernel thread object, process ID and thread ID.
     # If the kernel process object and kernel thread object are no longer used, PLEASE USE CloseHandle.
     # Otherwise, it'll crash the system in some cases.
-    process: PROCESS_INFORMATION = None
+    process: Optional[PROCESS_INFORMATION] = None
     # Window handles of the target process.
     hwnds: list = []
     # Pair, contains the hwnd of the focused window and a WINDOWPLACEMENT object.
