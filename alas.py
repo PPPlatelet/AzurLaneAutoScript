@@ -459,13 +459,13 @@ class AzurLaneAutoScript:
             from module.base.resource import release_resources
             if self.config.task.command != 'Alas':
                 release_resources(next_task=task.command)
-                
+
             if task.next_run <= datetime.now():
                 break
 
             logger.info(f'Wait until {task.next_run} for task `{task.command}`')
             self.is_first_task = False
-            
+
             method: str             = self.config.Optimization_WhenTaskQueueEmpty
             remainingtime: float    = (task.next_run - datetime.now()).total_seconds() / 60
             buffertime: int         = self.config.Optimization_ProcessBufferTime
@@ -508,7 +508,7 @@ class AzurLaneAutoScript:
             elif method == 'stop_emulator':
                 logger.info('Stop emulator during wait')
                 self.device.emulator_stop()
-                release_resources() 
+                release_resources()
                 self.device.release_during_wait()
                 if not self.wait_until(task.next_run):
                     del_cached_property(self, 'config')
