@@ -335,7 +335,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             raise e
         except Exception as e:
             logger.exception(e)
-            raise e
+            exit(1)
 
 if __name__ == '__main__':
     self = PlatformWindows('alas')

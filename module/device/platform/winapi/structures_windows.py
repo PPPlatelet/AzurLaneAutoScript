@@ -60,7 +60,7 @@ class Structure(_Structure):
         def bool_obj(v, *objs):
             if isinstance(v, str):
                 return v != '\x00'
-            return any(isinstance(v, obj) for obj in objs and bool(v))
+            return isinstance(v, objs) and bool(v)
         def bool_ptr(val):
             try:
                 return bool(val.contents.value)
@@ -124,10 +124,10 @@ class Structure(_Structure):
             raise TypeError("Invalid argument type")
 
     def __format__(self, format_spec):
-        def format_fields(format_spec, prefix):
+        def format_fields(spec, fix):
             values = [getattr(self, name) for name in self.field_name]
             return ', '.join(
-                f"{name}={prefix}" + f"{value:{format_spec}}"
+                f"{name}={fix}" + f"{value:{spec}}".upper()
                 if isinstance(value, int) else f"{name}={value}"
                 for name, value in zip(self.field_name, values)
             )

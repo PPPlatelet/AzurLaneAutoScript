@@ -304,8 +304,8 @@ class Device(Screenshot, Control, AppControl):
         def empty_function(*arg, **kwargs):
             return False
 
-        self.click_record_check = empty_function
-        self.stuck_record_check = empty_function
+        setattr(self, 'click_record_check', empty_function)
+        setattr(self, 'stuck_record_check', empty_function)
 
     def app_start(self):
         if not self.config.Error_HandleError:
