@@ -235,7 +235,7 @@ class Handle_(metaclass=ABCMeta):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         if hasattr(self, '_func'):
             self._handle = HANDLE(self._func(*self.__get_init_args__(*args, **kwargs)))
-            assert self, report(
+            assert self._handle.value is not None, report(
                 f"{self._func.__name__} failed",
                 use_log=kwargs.get('use_log', True),
                 r_exc=kwargs.get("r_exc", True)
