@@ -590,8 +590,7 @@ class AzurLaneAutoScript:
                                 "Please read the help text of the options.")
                 logger.critical("Possible reason #2: There is a problem with this task. "
                                 "Please contact developers or try to fix it yourself.")
-                self.crash_exit(RequestHumanTakeover('Request human takeover'),
-                                msg=f"\nTask `{task}` failed 3 or more times.")
+                self.crash_exit(RequestHumanTakeover(), msg=f"\nTask `{task}` failed 3 or more times.")
 
             if success:
                 del_cached_property(self, 'config')

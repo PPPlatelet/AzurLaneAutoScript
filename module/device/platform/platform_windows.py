@@ -11,10 +11,9 @@ from module.device.platform.winapi import \
     hex_or_normalize_path, EmulatorLaunchFailedError, PROCESS_INFORMATION, IterationFinished
 from module.device.platform.winapi.const_windows import SW_SHOW, SW_MINIMIZE, SW_HIDE
 from module.logger import logger
-from module.exception import ALASBaseError
 
 
-class EmulatorUnknown(ALASBaseError):
+class EmulatorUnknown(Exception):
     pass
 
 
