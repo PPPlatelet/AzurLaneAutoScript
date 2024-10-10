@@ -358,7 +358,7 @@ def send_message_box(
         caption: str = 'ALAS Message Box',
         style: int = None,
         helpid: int = None,
-        callback: Callable[[LPHELPINFO], None] = None,
+        callback: Callable[[POINTER], None] = None,
         p: int = None,
         s: int = None
 ) -> int:
@@ -382,7 +382,7 @@ def send_message_box(
     """
     pass
 
-def MsgBoxCallback(lphelpinfo: LPHELPINFO) -> None:
+def MsgBoxCallback(lphelpinfo: POINTER) -> None:
     """
     Help callback function that displays context-sensitive help information.
     This function is just an example function. Please modify it to suit your needs.
