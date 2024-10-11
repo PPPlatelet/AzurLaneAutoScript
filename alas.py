@@ -101,7 +101,7 @@ class AzurLaneAutoScript:
         except ScriptError as e:
             self.crash_exit(e, 'This is likely to be a mistake of developers, but sometimes just random issues',
                             log_exc=True)
-        except ALASBaseError as e:
+        except ALASBaseException as e:
             if not self.device.emulator_check():
                 self.reboot()
                 return False
