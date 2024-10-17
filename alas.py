@@ -112,7 +112,7 @@ class AzurLaneAutoScript:
                 return False
             self.crash_exit(e, log_exc=True, save=True)
 
-    def crash_exit(self, e, *args, log_exc=False, save=False, msg=''):
+    def crash_exit(self, e: Exception, *args, log_exc=False, save=False):
         if log_exc:
             logger.exception(e)
         else:
@@ -124,7 +124,7 @@ class AzurLaneAutoScript:
         handle_notify(
             self.config.Error_OnePushConfig,
             title=f"Alas <{self.config_name}> crashed",
-            content=f"<{self.config_name}> {e.__class__.__name__}{msg}"
+            content=f"<{self.config_name}> {e.__class__.__name__}"
         )
         exit(1)
 
@@ -590,7 +590,7 @@ class AzurLaneAutoScript:
                                 "Please read the help text of the options.")
                 logger.critical("Possible reason #2: There is a problem with this task. "
                                 "Please contact developers or try to fix it yourself.")
-                self.crash_exit(RequestHumanTakeover(), msg=f"\nTask `{task}` failed 3 or more times.")
+                self.crash_exit(RequestHumanTakeover(f"Task `{task}` failed 3 or more times."))
 
             if success:
                 del_cached_property(self, 'config')
