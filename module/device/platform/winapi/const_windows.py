@@ -1,6 +1,6 @@
 from sys import getwindowsversion
 
-from ctypes import c_void_p, c_byte
+from ctypes import c_void_p
 
 # winnt.h line 3961
 PROCESS_TERMINATE                   = 0x0001

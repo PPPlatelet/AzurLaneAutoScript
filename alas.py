@@ -112,13 +112,13 @@ class AzurLaneAutoScript:
                 return False
             self.crash_exit(e, log_exc=True, save=True)
 
-    def crash_exit(self, e: Exception, *args, log_exc=False, save=False):
+    def crash_exit(self, e: Exception, *msgs, log_exc=False, save=False):
         if log_exc:
             logger.exception(e)
         else:
             logger.critical(e)
-        for arg in args:
-            logger.critical(arg)
+        for msg in msgs:
+            logger.critical(msg)
         if save:
             self.save_error_log()
         handle_notify(
