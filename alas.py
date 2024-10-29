@@ -26,7 +26,7 @@ class AzurLaneAutoScript:
         # Failure count of tasks
         # Key: str, task name, value: int, failure count
         self.failure_record = {}
-        self.first_check = True
+        self.is_first_check = True
 
     @cached_property
     def config(self):
@@ -559,10 +559,10 @@ class AzurLaneAutoScript:
             _ = self.device
             # Get task
             task = self.get_next_task()
-            if self.first_check:
+            if self.is_first_check:
                 if not self.device.emulator_check():
                     self.run('reboot', skip_first_screenshot=True)
-                self.first_check = False
+                self.is_first_check = False
             self.device.config = self.config
             # Skip first restart
             if self.is_first_task and task == 'Restart':
