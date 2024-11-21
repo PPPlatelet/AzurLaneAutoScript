@@ -3,12 +3,14 @@ from typing import Any, Generator, Iterable
 from shlex import split as split_
 from os.path import dirname
 import threading
+from functools import wraps
 
 from ctypes import addressof, byref, create_unicode_buffer, sizeof, wstring_at
 from ctypes.wintypes import HWND, LPARAM, DWORD, ULONG
 
 from module.device.platform.emulator_windows import Emulator
 from module.device.platform.winapi import *
+from module.device.method.utils import RETRY_TRIES, retry_sleep
 from module.base.timer import Timer
 from module.logger import logger
 
@@ -21,6 +23,29 @@ __all__ = [
     'switch_window', 'get_parent_pid', 'get_exit_code', 'is_running',
     'send_message_box'
 ]
+
+def retry(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        init = None
+        for _ in range(RETRY_TRIES):
+            try:
+                if callable(init):
+                    retry_sleep(_)
+                    init()
+                return func(*args, **kwargs)
+            except OSError:
+                def init():
+                    pass
+            except WinApiBaseException:
+                def init():
+                    pass
+            except Exception:
+                def init():
+                    pass
+        path = get_callable_path(func)
+        report(f"'{path}' failed")
+    return wrapper
 
 def close_handle(handles: Iterable[Any], *args, fclose=None):
     from itertools import chain
@@ -51,9 +76,9 @@ def close_handle(handles: Iterable[Any], *args, fclose=None):
 
 def __yield_entries(entry32, snapshot, func):
     while 1:
+        yield entry32
         if not func(snapshot, byref(entry32)):
             break
-        yield entry32
 
     # Finished querying
     errcode = GetLastError()
@@ -63,22 +88,30 @@ def __yield_entries(entry32, snapshot, func):
 def _enum_processes() -> Generator[PROCESSENTRY32W, None, None]:
     with create_snapshot(TH32CS_SNAPPROCESS) as snapshot, PROCESSENTRY32W(sizeof(PROCESSENTRY32W)) as lppe32:
         assert Process32First(snapshot, byref(lppe32)), report("Process32First failed")
-        yield lppe32
         yield from __yield_entries(lppe32, snapshot, Process32Next)
 
 def _enum_threads() -> Generator[THREADENTRY32, None, None]:
     with create_snapshot(TH32CS_SNAPTHREAD) as snapshot, THREADENTRY32(sizeof(THREADENTRY32)) as lpte32:
         assert Thread32First(snapshot, byref(lpte32)), report("Thread32First failed")
-        yield lpte32
         yield from __yield_entries(lpte32, snapshot, Thread32Next)
 
 def get_focused_window():
-    hwnd = HWND(GetForegroundWindow())
-    wp = WINDOWPLACEMENT(sizeof(WINDOWPLACEMENT))
+    @retry
+    def getwindow():
+        hwnd = GetForegroundWindow()
+        if hwnd is None:
+            report("GetForegroundWindow failed", level=30)
+        return HWND(hwnd)
 
-    if not GetWindowPlacement(hwnd, byref(wp)):
-        report("Failed to get windowplacement", level=30, r_exc=False)
-        wp = None
+    @retry
+    def getplacement(hwnd):
+        wp = WINDOWPLACEMENT(sizeof(WINDOWPLACEMENT))
+        if GetWindowPlacement(hwnd, byref(wp)):
+            return wp
+        report("Faled to get windowplacement", level=30)
+
+    hwnd = getwindow()
+    wp = getplacement(hwnd)
 
     return hwnd, wp
 

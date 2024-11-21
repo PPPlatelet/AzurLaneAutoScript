@@ -163,8 +163,7 @@ class AzurLaneAutoScript:
         p = Platform(self.config_name)
         if not p.emulator_check():
             p.emulator_start()
-            self.config.task_call('Restart')
-            self.is_first_task = False
+            self.run('restart')
 
     def reboot(self, use_log=True):
         if use_log:
