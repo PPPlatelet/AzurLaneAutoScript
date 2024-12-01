@@ -352,7 +352,7 @@ class MSGBOXPARAMSW(Structure):
 
 def test_structure():
     g = globals()
-    structures1 = [g[s]() for s in __all__ if issubclass(g[s], Structure) and g[s] is not Structure]
+    structures1 = [g[s]() for s in __all__ if issubclass(g[s], Structure) and not g[s] is Structure]
     for structure in structures1:
         print(structure)
     bools1 = [bool(structure) for structure in structures1]
@@ -360,7 +360,7 @@ def test_structure():
     structures1[11][1] = POINTER(PEB)(PEB())
     print(bool(structures1[11]))
 
-    structures2 = [g[s]() for s in __all__ if issubclass(g[s], Structure) and g[s] is not Structure]
+    structures2 = [g[s]() for s in __all__ if issubclass(g[s], Structure) and not g[s] is Structure]
     bools2 = [structure1 == structure2 for structure1, structure2 in zip(structures1, structures2)]
     print(bools2)
 

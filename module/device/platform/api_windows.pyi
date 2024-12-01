@@ -356,11 +356,11 @@ def is_running(pid: int = 0, ppid: int = 0) -> bool:
 def send_message_box(
         text: str = 'Hello World!',
         caption: str = 'ALAS Message Box',
-        style: int = None,
-        helpid: int = None,
+        style: Optional[int] = None,
+        helpid: Optional[int] = None,
         callback: Callable[[POINTER], None] = None,
-        p: int = None,
-        s: int = None
+        p: Optional[int] = None,
+        s: Optional[int] = None
 ) -> int:
     """
     Displays a message box with the specified information.

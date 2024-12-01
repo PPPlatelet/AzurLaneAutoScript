@@ -349,12 +349,14 @@ def get_process(instance):
 
         if instance == Emulator.MuMuPlayer12:
             match = re.search(r'-v\s*(\d+)', cmdline)
-            if match is None:
+            if instance.MuMuPlayer12_id == 0:
                 return _get_process(pid)
             if match and int(match.group(1)) == instance.MuMuPlayer12_id:
                 return _get_process(pid)
         elif instance == Emulator.LDPlayerFamily:
             match = re.search(r'index=\s*(\d+)', cmdline)
+            if instance.LDPlayer_id == 0:
+                return _get_process(pid)
             if match and int(match.group(1)) == instance.LDPlayer_id:
                 return _get_process(pid)
         else:

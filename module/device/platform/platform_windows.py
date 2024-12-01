@@ -20,7 +20,7 @@ class EmulatorUnknown(Exception):
 class PlatformWindows(PlatformBase, EmulatorManager):
     # Quadruple, contains the kernel process object, kernel thread object, process ID and thread ID.
     # If the kernel process object and kernel thread object are no longer used, PLEASE USE CloseHandle.
-    # Otherwise, it'll crash the system in some cases.
+    # Otherwise, it'll crash the system in some extreme cases.
     process: Optional[PROCESS_INFORMATION] = None
     # Window handles of the target process.
     hwnds: list = []
@@ -43,7 +43,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         silentstart = False if self.config.Emulator_SilentStart == 'normal' else True
 
         if isinstance(self.process, PROCESS_INFORMATION) and all(self.process[:2]):
-            logger.info(f"Close previous handles")
+            logger.info(f"Close expired handles")
             api_windows.close_handle(handles=self.process[:2])
             self.process = None
 
