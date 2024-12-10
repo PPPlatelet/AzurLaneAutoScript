@@ -1,12 +1,12 @@
-from abc import ABCMeta, abstractmethod
-from typing import Any, Callable, Optional, Union
+from abc import ABCMeta, abstractmethod # type: ignore
+from typing import Any, Callable, Optional, Union # type: ignore
 
 from ctypes import POINTER, WINFUNCTYPE, WinDLL, c_size_t, c_void_p
 from ctypes.wintypes import \
     HANDLE, DWORD, HWND, BOOL, INT, UINT, \
     LONG, ULONG, LPWSTR, LPCWSTR, \
     LPVOID, LPCVOID, LPARAM, PULONG, \
-    PDWORD, HMODULE
+    PDWORD, HMODULE # type: ignore
 
 from module.device.platform.winapi.structures_windows import \
     SECURITY_ATTRIBUTES, STARTUPINFOW, WINDOWPLACEMENT, \

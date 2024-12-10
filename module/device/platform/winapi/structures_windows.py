@@ -1,10 +1,10 @@
-from re import search, fullmatch
+from re import search, fullmatch # type: ignore
 
 from ctypes import \
     POINTER, Structure as _Structure, WINFUNCTYPE, _SimpleCData, _Pointer, _CFuncPtr, \
     c_int32, c_uint32, c_uint64, c_uint16, \
     c_wchar, c_wchar_p, c_void_p, c_ubyte, c_byte, c_long, c_ulong
-from ctypes.wintypes import MAX_PATH, FILETIME as _FILETIME
+from ctypes.wintypes import MAX_PATH, FILETIME as _FILETIME # type: ignore
 
 __all__ = [
     'WinApiBaseException', 'EmulatorLaunchFailedError', 'HwndNotFoundError', 'IterationFinished',

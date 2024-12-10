@@ -1,7 +1,7 @@
-from typing import Any, Callable, Generator, Iterable, List, NewType, Optional, Tuple, Union
+from typing import Any, Callable, Generator, Iterable, List, NewType, Optional, Tuple, Union # type: ignore
 
 from ctypes import POINTER
-from ctypes.wintypes import HANDLE, HWND
+from ctypes.wintypes import HANDLE, HWND # type: ignore
 
 from module.device.platform.emulator_windows import EmulatorInstance
 from module.device.platform.winapi import *
@@ -10,7 +10,7 @@ LPPROCESSENTRY32W   = NewType('LPPROCESSENTRY32W',  POINTER(PROCESSENTRY32W))
 LPTHREADENTRY32     = NewType('LPTHREADENTRY32',    POINTER(THREADENTRY32))
 LPFILETIME          = NewType('LPFILETIME',         POINTER(FILETIME))
 
-def close_handle(handles: Iterable[Any], *args, fclose: Callable[[HANDLE], None] = None) -> bool:
+def close_handle(handles: Iterable[Any], *args, fclose: Callable[[HANDLE], None] = CloseHandle) -> bool:
     """
     Close handles.
 
@@ -303,7 +303,7 @@ def get_process(instance: Optional[EmulatorInstance]) -> PROCESS_INFORMATION:
     """
     pass
 
-def switch_window(hwnds: List[HWND] = None, arg: int = None) -> bool:
+def switch_window(hwnds: Optional[List[HWND]] = None, arg: Optional[int] = None) -> bool:
     """
     Switch window placement to the given argument.
 

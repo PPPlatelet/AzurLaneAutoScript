@@ -1,12 +1,12 @@
-import re
-from typing import Any, Generator, Iterable
-from shlex import split as split_
+import re # type: ignore
+from typing import Any, Generator, Iterable, Callable, List # type: ignore
+from shlex import split as split_ # type: ignore
 from os.path import dirname
-import threading
-from functools import wraps
+import threading # type: ignore
+from functools import wraps # type: ignore
 
 from ctypes import addressof, byref, create_unicode_buffer, sizeof, wstring_at
-from ctypes.wintypes import HWND, LPARAM, DWORD, ULONG
+from ctypes.wintypes import HWND, LPARAM, DWORD, ULONG # type: ignore
 
 from module.device.platform.emulator_windows import Emulator
 from module.device.platform.winapi import *
@@ -26,8 +26,11 @@ __all__ = [
 
 def retry(func):
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any):
         init = None
+        def bind(func):
+            nonlocal init
+            init = func
         for _ in range(RETRY_TRIES):
             try:
                 if callable(init):
@@ -35,24 +38,19 @@ def retry(func):
                     init()
                 return func(*args, **kwargs)
             except OSError:
-                def init():
-                    pass
+                bind(lambda: None)
             except WinApiBaseException:
-                def init():
-                    pass
+                bind(lambda: None)
             except Exception:
-                def init():
-                    pass
+                bind(lambda: None)
         path = get_callable_path(func)
         report(f"'{path}' failed")
     return wrapper
 
-def close_handle(handles: Iterable[Any], *args, fclose=None):
+def close_handle(handles: Iterable[Any], *args: Any, fclose: Callable[..., Any] = CloseHandle):
     from itertools import chain
 
-    if fclose is None:
-        fclose = CloseHandle
-    closed = []
+    closed: List[Any] = []
 
     for handle in chain(handles, args):
         if isinstance(handle, (int, c_void_p)):
@@ -223,7 +221,7 @@ def get_hwnds(pid):
     hwnds = []
 
     @EnumWindowsProc
-    def callback(hwnd: HWND, lparam: LPARAM):  # DO NOT DELETE THIS PARAMETER!!!
+    def callback(hwnd: int, lparam: LPARAM):  # DO NOT DELETE THIS PARAMETER!!!
         processid = DWORD()
         GetWindowThreadProcessId(hwnd, byref(processid))
         if processid.value == pid:
@@ -365,6 +363,8 @@ def get_process(instance):
                 return _get_process(pid)
 
 def switch_window(hwnds=None, arg=None):
+    if hwnds is None or not isinstance(arg, int):
+        return False
     for hwnd in hwnds:
         if not GetWindow(hwnd, GW_CHILD):
             continue
@@ -423,7 +423,7 @@ def send_message_box(
         else:
             mbparams[8] = None
 
-    if all(isinstance(i, int) for i in (p, s)):
+    if isinstance(p, int) and isinstance(s, int):
         mbparams.dwLanguageId = (s & 0xffff) << 10 | (p & 0xffff)
 
     result = MessageBoxIndirectW(byref(mbparams))
