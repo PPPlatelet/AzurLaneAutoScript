@@ -106,10 +106,8 @@ class LDConsole:
         0,雷电模拟器,28053900,42935798,1,59776,36816,1280,720,240
         1,雷电模拟器-1,0,0,0,-1,-1,1280,720,240
         """
-        data = self.subprocess_run(['list2'])
-        for row in data.strip().split(b'\n'):
-            info = row.strip().split(b',')
-            yield DataLDPlayerInfo(*info)
+        for row in self.subprocess_run(['list2']).strip().split(b'\n'):
+            yield DataLDPlayerInfo(*row.strip().split(b','))
 
 
 class IScreenShotClass:
