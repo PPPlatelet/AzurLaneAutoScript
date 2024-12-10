@@ -2,7 +2,8 @@ from sys import getwindowsversion
 
 from ctypes import c_void_p
 
-# winnt.h line 3961
+# Process Security and Access Rights
+# Please read https://learn.microsoft.com/windows/win32/procthread/process-security-and-access-rights for more information
 PROCESS_TERMINATE                   = 0x0001
 PROCESS_CREATE_THREAD               = 0x0002
 PROCESS_SET_SESSIONID               = 0x0004
@@ -17,6 +18,8 @@ PROCESS_QUERY_INFORMATION           = 0x0400
 PROCESS_SUSPEND_RESUME              = 0x0800
 PROCESS_QUERY_LIMITED_INFORMATION   = 0x1000
 
+# Thread Security and Access Rights
+# Please read https://learn.microsoft.com/windows/win32/procthread/thread-security-and-access-rights for more information
 THREAD_TERMINATE                    = 0x0001
 THREAD_SUSPEND_RESUME               = 0x0002
 THREAD_GET_CONTEXT                  = 0x0008
@@ -29,7 +32,6 @@ THREAD_DIRECT_IMPERSONATION         = 0x0200
 THREAD_SET_LIMITED_INFORMATION      = 0x0400
 THREAD_QUERY_LIMITED_INFORMATION    = 0x0800
 
-# winnt.h line 2805
 STANDARD_RIGHTS_REQUIRED    = 0x000F0000
 DELETE                      = 0x00010000
 READ_CONTROL                = 0x00020000
@@ -47,7 +49,8 @@ else:
     PROCESS_ALL_ACCESS      = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xfff
     THREAD_ALL_ACCESS       = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0x3ff
 
-# tlhelp32.h line 17
+# The portions of the system to be included in the snapshot.
+# Please read https://learn.microsoft.com/windows/win32/api/tlhelp32/nf-tlhelp32-createtoolhelp32snapshot for more information
 TH32CS_SNAPHEAPLIST = 0x00000001
 TH32CS_SNAPPROCESS  = 0x00000002
 TH32CS_SNAPTHREAD   = 0x00000004
@@ -61,7 +64,8 @@ TH32CS_SNAPALL      = (
 )
 TH32CS_INHERIT      = 0x80000000
 
-# winbase.h line 1463
+# A bitfield that determines whether certain STARTUPINFO members are used when the process creates a window.
+# Please read https://learn.microsoft.com/windows/win32/api/processthreadsapi/ns-processthreadsapi-startupinfow for more information
 STARTF_USESHOWWINDOW    = 0x00000001
 STARTF_USESIZE          = 0x00000002
 STARTF_USEPOSITION      = 0x00000004
@@ -77,7 +81,8 @@ STARTF_TITLEISLINKNAME  = 0x00000800
 STARTF_TITLEISAPPID     = 0x00001000
 STARTF_PREVENTPINNING   = 0x00002000
 
-# winuser.h line 200
+# Controls how the window is to be shown.
+# Please read https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-showwindow for more information
 SW_HIDE             = 0
 SW_SHOWNORMAL       = 1
 SW_NORMAL           = 1
@@ -94,6 +99,8 @@ SW_SHOWDEFAULT      = 10
 SW_FORCEMINIMIZE    = 11
 SW_MAX              = 11
 
+# The relationship between the specified window and the window whose handle is to be retrieved.
+# Please read https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-getwindow for more information
 GW_HWNDFIRST    = 0
 GW_HWNDLAST     = 1
 GW_HWNDNEXT     = 2
@@ -102,7 +109,8 @@ GW_OWNER        = 4
 GW_CHILD        = 5
 GW_ENABLEDPOPUP = 6
 
-# winbase.h line 377
+# The flags that control the priority class and the creation of the process.
+# Please read https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw for more information
 DEBUG_PROCESS                       = 0x00000001
 DEBUG_ONLY_THIS_PROCESS             = 0x00000002
 CREATE_SUSPENDED                    = 0x00000004
@@ -141,7 +149,7 @@ PROFILE_KERNEL                      = 0x20000000
 PROFILE_SERVER                      = 0x40000000
 CREATE_IGNORE_SYSTEM_DEFAULT        = 0x80000000
 
-# subauth.h line 250
+# Process access rights for OpenProcess/OpenThread
 STATUS_SUCCESS                  = 0x00000000
 STATUS_INVALID_INFO_CLASS       = 0xC0000003
 STATUS_NO_SUCH_USER             = 0xC0000064
@@ -158,6 +166,8 @@ STATUS_ACCOUNT_EXPIRED          = 0xC0000193
 STATUS_PASSWORD_MUST_CHANGE     = 0xC0000224
 STATUS_ACCOUNT_LOCKED_OUT       = 0xC0000234
 
+# The contents and behavior of the dialog box.
+# Please read https://learn.microsoft.com/zh-cn/windows/win32/api/winuser/nf-winuser-messagebox for more information
 MB_OK                   = 0x00000000
 MB_OKCANCEL             = 0x00000001
 MB_ABORTRETRYIGNORE     = 0x00000002
@@ -205,27 +215,25 @@ MB_DEFMASK  = 0x00000F00
 MB_MODEMASK = 0x00003000
 MB_MISCMASK = 0x0000C000
 
-IDABORT     = 3
-IDCANCEL    = 2
-IDCONTINUE  = 11
-IDIGNORE    = 5
-IDNO        = 7
 IDOK        = 1
+IDCANCEL    = 2
+IDABORT     = 3
 IDRETRY     = 4
-IDTRYAGAIN  = 10
+IDIGNORE    = 5
 IDYES       = 6
+IDNO        = 7
+IDTRYAGAIN  = 10
+IDCONTINUE  = 11
 
-# error.h line 23
 ERROR_NO_MORE_FILES = 0x12
 
-# winerror.h line 227
 ERROR_SUCCESS = 0
 
 WAIT_ABANDONED  = 0x00000080
 WAIT_OBJECT_0   = 0x00000000
 WAIT_TIMEOUT    = 0x00000102
 WAIT_FAILED     = 0xFFFFFFFF
-# winbase.h line 822
+
 INFINITE        = 0xFFFFFFFF
 
 MAXULONGLONG            = c_void_p(-1).value

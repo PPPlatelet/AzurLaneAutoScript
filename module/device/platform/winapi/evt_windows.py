@@ -15,13 +15,13 @@ from module.device.platform.api_windows import is_running, get_cmdline, terminat
 from module.logger import logger
 
 class Evtapi:
-    # winevt.h line 156
+
     EVT_QUERY_CHANNEL_PATH          = 0x1
     EVT_QUERY_FILE_PATH             = 0x2
     EVT_QUERY_FORWARD_DIRECTION     = 0x100
     EVT_QUERY_REVERSE_DIRECTION     = 0x200
     EVT_QUERY_TOLERATE_QUERY_ERRORS = 0x1000
-    # line 176
+
     EVT_RENDER_EVENT_VALUES = 0
     EVT_RENDER_EVENT_XML    = 1
     EVT_RENDER_BOOK_MARK    = 2
