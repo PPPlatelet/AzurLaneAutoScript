@@ -183,10 +183,15 @@ class Structure(_Structure):
         for name in self.field_name:
             yield name, getattr(self, name)
 
+    def __reversed__(self):
+        for name in reversed(self.field_name):
+            yield name, getattr(self, name)
+
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb): ...
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
 
 # processthreadsapi.h line 28
 class PROCESS_INFORMATION(Structure):

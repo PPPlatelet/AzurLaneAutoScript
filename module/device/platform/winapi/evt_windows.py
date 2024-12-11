@@ -243,7 +243,7 @@ class ProcessManager(Evtapi):
                     if data.new_process_id == self.mainpid:
                         break
                 with self.lock:
-                    self.datas = self.datas[::-1]
+                    self.datas = self.datas.reverse()
                     self.build_tree()
         except OSError:
             self.exit_event.set()
