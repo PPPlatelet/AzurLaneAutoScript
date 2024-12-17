@@ -1,12 +1,12 @@
-import re # type: ignore
-from typing import Any, Generator, Iterable, Callable, List # type: ignore
-from shlex import split as split_ # type: ignore
+import re
+from typing import Any, Generator, Iterable, Callable, List, Tuple, Optional
+from shlex import split as split_
 from os.path import dirname
-import threading # type: ignore
-from functools import wraps # type: ignore
+import threading
+from functools import wraps
 
 from ctypes import addressof, byref, create_unicode_buffer, sizeof, wstring_at
-from ctypes.wintypes import HWND, LPARAM, DWORD, ULONG # type: ignore
+from ctypes.wintypes import HWND, LPARAM, DWORD, ULONG
 
 from module.device.platform.emulator_windows import Emulator
 from module.device.platform.winapi import *
@@ -23,6 +23,9 @@ __all__ = [
     'switch_window', 'get_parent_pid', 'get_exit_code', 'is_running',
     'send_message_box'
 ]
+
+WINDOW  = Tuple[HWND, Optional[WINDOWPLACEMENT]]
+HWNDS   = List[HWND]
 
 def retry(func):
     @wraps(func)
@@ -123,35 +126,36 @@ def set_focus_to_window(focusedwindow):
     ShowWindow(focusedwindow[0], focusedwindow[1].showCmd)
     SetWindowPlacement(focusedwindow[0], byref(focusedwindow[1]))
 
-def refresh_window(focusedwindow, max_attempts=10, interval=0.5):
+def refresh_window(prevwindow, hwnds, max_attempts=10, interval=0.5):
     from itertools import combinations
 
-    attempts = 0
-    prevwindow = None
+    if prevwindow is None:
+        return
 
-    unique = lambda *args: all(x[0].value != y[0].value for x, y in combinations(args, 2))
+    def unique(*args: Tuple[WINDOW]):
+        return all(x[0].value != y[0].value for x, y in combinations(args, 2))
+
+    def eq(window: WINDOW, hwnds: HWNDS):
+        return any(window[0].value == hwnd.value for hwnd in hwnds)
+
     interval = Timer(interval).start()
 
-    while attempts < max_attempts:
-        currentwindow = get_focused_window()
-        if prevwindow is not None and unique(currentwindow, prevwindow, focusedwindow):
-            break
-
-        if unique(focusedwindow, currentwindow):
-            logger.info(f"Current window is {currentwindow[0]}, flash back to {focusedwindow[0]}")
-            set_focus_to_window(focusedwindow)
-            attempts += 1
+    for _ in range(max_attempts):
+        focusedwindow = get_focused_window()
+        if eq(focusedwindow, hwnds):
+            logger.info(f"Current window is {focusedwindow[0]}, flash back to {prevwindow[0]}")
+            set_focus_to_window(prevwindow)
             interval.wait()
             interval.reset()
             continue
 
-        attempts += 1
+        if unique(prevwindow, focusedwindow):
+            break
+
         interval.wait()
         interval.reset()
-
-        prevwindow = currentwindow
-
-    del focusedwindow, currentwindow, prevwindow
+    
+    del focusedwindow, prevwindow
 
 def execute(command, silentstart, start):
     # TODO:Create Process with non-administrator privileges
@@ -195,10 +199,6 @@ def execute(command, silentstart, start):
         byref(lpProcessInformation)
     ),  report("Failed to start emulator", exc=EmulatorLaunchFailedError)
 
-    if start and silentstart:
-        refresh_thread = threading.Thread(target=refresh_window, name='Refresh-Thread', args=(focusedwindow,))
-        refresh_thread.start()
-
     if start:
         wait = WaitForInputIdle(lpProcessInformation[0], INFINITE)
         assert wait == 0, \
@@ -208,7 +208,13 @@ def execute(command, silentstart, start):
         close_handle(lpProcessInformation[:2])
         lpProcessInformation = None
 
-    return lpProcessInformation, focusedwindow
+    hwnds = get_hwnds(lpProcessInformation[2])
+
+    if start and silentstart:
+        refresh_thread = threading.Thread(target=refresh_window, args=(focusedwindow, hwnds))
+        refresh_thread.start()
+
+    return lpProcessInformation, focusedwindow, hwnds
 
 def terminate_process(pid):
     with open_process(PROCESS_TERMINATE, pid) as hProcess:
@@ -216,6 +222,7 @@ def terminate_process(pid):
             report(f"Failed to terminate process: {pid}", level=30, r_exc=False)
     return True
 
+@retry
 def get_hwnds(pid):
     logger.hr("Get hwnds", level=3)
     hwnds = []
@@ -310,9 +317,10 @@ def get_thread(pid):
                 continue
 
             minstarttime = threadstarttime
-            mainthreadid = lpte32.th32ThreadID
+            mainthreadid: int = lpte32.th32ThreadID
     except IterationFinished:
-        return mainthreadid
+        pass
+    return mainthreadid
 
 def _get_process(pid):
     tid = get_thread(pid)
@@ -426,7 +434,7 @@ def send_message_box(
     if isinstance(p, int) and isinstance(s, int):
         mbparams.dwLanguageId = (s & 0xffff) << 10 | (p & 0xffff)
 
-    result = MessageBoxIndirectW(byref(mbparams))
+    result: int = MessageBoxIndirectW(byref(mbparams))
 
     return result
 

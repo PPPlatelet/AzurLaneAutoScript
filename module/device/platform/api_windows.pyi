@@ -94,7 +94,8 @@ def set_focus_to_window(focusedwindow: Tuple[HWND, Optional[WINDOWPLACEMENT]]) -
     pass
 
 def refresh_window(
-        focusedwindow: Tuple[HWND, Optional[WINDOWPLACEMENT]],
+        prevwindow: Tuple[HWND, Optional[WINDOWPLACEMENT]],
+        hwnds: List[HWND],
         max_attempts: int = 10,
         interval: float = 0.5
 ) -> None:
@@ -103,7 +104,8 @@ def refresh_window(
     This function is only used in multithreading.
 
     Args:
-        focusedwindow (Tuple[HWND, Optional[WINDOWPLACEMENT]]): Originally focused window's hwnd and placement.
+        prevwindow (Tuple[HWND, Optional[WINDOWPLACEMENT]]): Originally focused window's hwnd and placement.
+        hwnds (List[HWND]): Possible window hwnds of the process.
         max_attempts (int): The maximum number of attempts to refocus.
         interval (float): The interval (in seconds) between attempts.
 
@@ -116,7 +118,7 @@ def execute(
         command: str,
         silentstart: bool,
         start: bool
-) -> Tuple[Optional[PROCESS_INFORMATION], Tuple[HWND, Optional[WINDOWPLACEMENT]]]:
+) -> Tuple[Optional[PROCESS_INFORMATION], Tuple[HWND, Optional[WINDOWPLACEMENT]], List[HWND]]:
     """
     Create a new process.
 
@@ -130,9 +132,7 @@ def execute(
         -> 'PROCESS_INFORMATION(1, 2, 3, 4), (114514, WINDOWPLACEMENT(1, 2, 3, POINT(1, 2), POINT(1, 2), RECT(1, 2, 3, 4)))'
 
     Returns:
-        (lpProcessInformation, focusedwindow) (Optional[PROCESS_INFORMATION], Tuple[HWND, Optional[WINDOWPLACEMENT]]):
-            PROCESS_INFORMATION structure of the new process,
-            Currently focused window's hwnd and placement.
+        tuple (PROCESS_INFORMATION | None, tuple(HWND, WINDOWPLACEMENT), list[HWND]): Process information, focused window information, window hwnds.
 
     Raises:
         EmulatorLaunchFailedError: If CreateProcessW failed.

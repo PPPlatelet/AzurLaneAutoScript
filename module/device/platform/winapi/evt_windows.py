@@ -1,12 +1,12 @@
-from datetime import datetime # type: ignore
-import re # type: ignore
+from datetime import datetime
+import re
 
-from queue import Queue # type: ignore
+from queue import Queue
 import asyncio
-import threading # type: ignore
+import threading
 
 from ctypes import WinDLL, POINTER, byref, create_unicode_buffer
-from ctypes.wintypes import HANDLE, LPCWSTR, DWORD, BOOL, LPVOID # type: ignore
+from ctypes.wintypes import HANDLE, LPCWSTR, DWORD, BOOL, LPVOID
 
 from module.device.platform.winapi.const_windows import ERROR_SUCCESS, INVALID_HANDLE_VALUE, INFINITE
 from module.device.platform.winapi.functions_windows import \

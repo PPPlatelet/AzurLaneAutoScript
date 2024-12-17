@@ -47,9 +47,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             api_windows.close_handle(handles=self.process[:2])
             self.process = None
 
-        self.hwnds = []
-
-        self.process, self.focusedwindow = api_windows.execute(command, silentstart, start)
+        self.process, self.focusedwindow, self.hwnds = api_windows.execute(command, silentstart, start)
         return True
 
     def _start(self, command: str) -> bool:
@@ -253,7 +251,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 if device.status == 'device':
                     # Emulator online
                     pass
-                if device.status == 'offline':
+                elif device.status == 'offline':
                     self.adb_client.disconnect(serial)
                     adb_connect()
                     continue
@@ -279,9 +277,6 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
             # All check passed
             break
-
-        # Check emulator process and hwnds
-        self.hwnds = api_windows.get_hwnds(self.process[2])
 
         logger.info(f'Emulator start completed')
         return True
