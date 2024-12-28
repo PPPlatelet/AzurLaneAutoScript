@@ -167,7 +167,7 @@ STATUS_PASSWORD_MUST_CHANGE     = 0xC0000224
 STATUS_ACCOUNT_LOCKED_OUT       = 0xC0000234
 
 # The contents and behavior of the dialog box.
-# Please read https://learn.microsoft.com/zh-cn/windows/win32/api/winuser/nf-winuser-messagebox for more information
+# Please read https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-messagebox for more information
 MB_OK                   = 0x00000000
 MB_OKCANCEL             = 0x00000001
 MB_ABORTRETRYIGNORE     = 0x00000002

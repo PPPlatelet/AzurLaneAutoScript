@@ -114,7 +114,7 @@ def refresh_window(
     """
     pass
 
-def execute(
+def execute_direct(
         command: str,
         silentstart: bool,
         start: bool
@@ -132,10 +132,33 @@ def execute(
         -> 'PROCESS_INFORMATION(1, 2, 3, 4), (114514, WINDOWPLACEMENT(1, 2, 3, POINT(1, 2), POINT(1, 2), RECT(1, 2, 3, 4)))'
 
     Returns:
-        tuple (PROCESS_INFORMATION | None, tuple(HWND, WINDOWPLACEMENT), list[HWND]): Process information, focused window information, window hwnds.
+        tuple (PROCESS_INFORMATION | None, tuple(HWND, WINDOWPLACEMENT)): Process information, focused window information.
 
     Raises:
         EmulatorLaunchFailedError: If CreateProcessW failed.
+    """
+    pass
+
+def execute_indirect(
+        command: str,
+        silentstart: bool,
+        start: bool,
+) -> Tuple[Optional[PROCESS_INFORMATION], Tuple[HWND, Optional[WINDOWPLACEMENT]], List[HWND]]:
+    """
+    Create a new process indirectly.
+
+    Args:
+        command (str): Command-line arguments of the process.
+        silentstart (bool): Window placement of the process.
+        start (bool): True if start emulator, False if not.
+
+    Examples:
+        >>> print(execute('"E:/Program Files/Netease/MuMu Player 12/shell/MuMuPlayer.exe" -v 1', False, True))
+        -> 'None, (c_void_p(114514), WINDOWPLACEMENT(1, 2, 3, POINT(1, 2), POINT(1, 2), RECT(1, 2, 3, 4)))'
+
+    Returns:
+        tuple (PROCESS_INFORMATION | None, tuple(HWND, WINDOWPLACEMENT)): Process information, focused window information.
+
     """
     pass
 
@@ -151,6 +174,14 @@ def terminate_process(pid: int) -> bool:
     """
     pass
 
+def terminate_process_tree(pid: int) -> None:
+    """
+    Terminate a process tree.
+
+    Args:
+        pid (int): Process ID.
+    """
+
 def get_hwnds(pid: int) -> List[HWND]:
     """
     Get window hwnds of the process.
@@ -164,6 +195,7 @@ def get_hwnds(pid: int) -> List[HWND]:
     Raises:
         HwndNotFoundError: If EnumWindows failed.
     """
+    pass
 
 def get_cmdline(pid: int) -> str:
     """
@@ -259,7 +291,7 @@ def _get_thread_creation_time(tid: int) -> Optional[int]:
     """
     pass
 
-def get_thread(pid: int) -> int:
+def get_main_thread(pid: int) -> int:
     """
     Get the main thread ID of the process.
 
@@ -271,7 +303,21 @@ def get_thread(pid: int) -> int:
 
     Raises:
         OSError: If any winapi failed.
-        IterationFinished: If enumeration completed.
+    """
+    pass
+
+def get_threads(pid: int) -> List[int]:
+    """
+    Get thread IDs of the process.
+
+    Args:
+        pid (int): Process ID.
+
+    Returns:
+        threadids (list): Thread IDs of the process.
+
+    Raises:
+        OSError: If any winapi failed.
     """
     pass
 

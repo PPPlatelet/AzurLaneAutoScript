@@ -115,7 +115,7 @@ class Connection(ConnectionAttr):
         # Connect
         try:
             self.adb_connect()
-        except EmulatorNotRunningError:
+        except (EmulatorNotRunningError, ConnectionResetError):
             return
         logger.attr('AdbDevice', self.adb)
 

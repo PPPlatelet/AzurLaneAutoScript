@@ -212,7 +212,7 @@ def report(
     if r_status:
         if status == -1:
             status = GetLastError()
-        message.append(f"Status code: 0x{status:08x}")
+        message.append(f"Status code: 0x{status:08X}")
     if args:
         message.append(f"args: {' '.join(map(str, args))}")
     if kwargs:
@@ -329,7 +329,6 @@ def get_callable_path(_callable: Callable[..., Any]) -> str:
         'module.device.platform.winapi.structures_windows.Structure::__init_subclass__'
         >>> get_callable_path(lambda x: x)
         '__main__.<lambda>'
-
 
     Returns:
         str: Functions's relative path.

@@ -44,10 +44,16 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
         if isinstance(self.process, PROCESS_INFORMATION) and all(self.process[:2]):
             logger.info(f"Close expired handles")
-            api_windows.close_handle(handles=self.process[:2])
+            api_windows.close_handle(self.process[:2])
             self.process = None
 
-        self.process, self.focusedwindow, self.hwnds = api_windows.execute(command, silentstart, start)
+        self.hwnds = []
+        if start:
+            # The purpose of creating process indirectly is to avoid some unnecessary troubles.
+            self.process, self.focusedwindow = api_windows.execute_indirect(command, silentstart, start)
+        else:
+            self.process, self.focusedwindow = api_windows.execute_direct(command, silentstart, start)
+
         return True
 
     def _start(self, command: str) -> bool:
@@ -176,6 +182,19 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             self._stop(f'"{Emulator.single_to_console(exe)}" stop -n {instance.name}')
         else:
             raise EmulatorUnknown(f'Cannot stop an unknown emulator instance: {instance}')
+
+    def _emulator_restart(self, instance: EmulatorInstance):
+        """
+        Restart an emulator without error handling
+        """
+        exe: str = instance.emulator.path
+        if instance == Emulator.MuMuPlayer12:
+            # MuMuManager.exe control -v 1 restart
+            if instance.MuMuPlayer12_id is None:
+                logger.warning(f'Cannot get MuMu instance index from name {instance.name}')
+            self._stop(f'"{Emulator.single_to_console(exe)}" control -v {instance.MuMuPlayer12_id} restart')
+        else:
+            raise EmulatorUnknown(f'Cannot restart an unknown emulator instance: {instance}')
 
     def _emulator_function_wrapper(self, func: Callable):
         """

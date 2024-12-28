@@ -1,12 +1,14 @@
 import re
 from typing import Any, Generator, Iterable, Callable, List, Tuple, Optional
-from shlex import split as split_
-from os.path import dirname
+import shlex
+import os
 import threading
 from functools import wraps
 
 from ctypes import addressof, byref, create_unicode_buffer, sizeof, wstring_at
 from ctypes.wintypes import HWND, LPARAM, DWORD, ULONG
+import psutil
+import subprocess
 
 from module.device.platform.emulator_windows import Emulator
 from module.device.platform.winapi import *
@@ -17,7 +19,7 @@ from module.logger import logger
 __all__ = [
     'close_handle', '__yield_entries', '_enum_processes', '_enum_threads',
     'get_focused_window', 'set_focus_to_window', 'refresh_window',
-    'execute', 'terminate_process', 'get_hwnds', 'get_cmdline',
+    'execute_direct', 'execute_indirect', 'terminate_process', 'get_hwnds', 'get_cmdline',
     'kill_process_by_regex', '__get_time', '_get_process_creation_time',
     '_get_thread_creation_time', 'get_thread', '_get_process', 'get_process',
     'switch_window', 'get_parent_pid', 'get_exit_code', 'is_running',
@@ -31,6 +33,7 @@ def retry(func):
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any):
         init = None
+        exception = None
         def bind(func):
             nonlocal init
             init = func
@@ -40,14 +43,16 @@ def retry(func):
                     retry_sleep(_)
                     init()
                 return func(*args, **kwargs)
-            except OSError:
+            except WinApiBaseException as e:
+                exception = type(e)
                 bind(lambda: None)
-            except WinApiBaseException:
+            except OSError as e:
+                exception = type(e)
                 bind(lambda: None)
-            except Exception:
+            except Exception as e:
+                exception = type(e)
                 bind(lambda: None)
-        path = get_callable_path(func)
-        report(f"'{path}' failed")
+        report(f"'{func.__name__}' failed", exc=exception)
     return wrapper
 
 def close_handle(handles: Iterable[Any], *args: Any, fclose: Callable[..., Any] = CloseHandle):
@@ -157,16 +162,13 @@ def refresh_window(prevwindow, hwnds, max_attempts=10, interval=0.5):
     
     del focusedwindow, prevwindow
 
-def execute(command, silentstart, start):
+def execute_direct(command, silentstart, start):
     # TODO:Create Process with non-administrator privileges
     logger.info(f"Create Process: {command}")
     focusedwindow               = get_focused_window()
 
-    lpApplicationName           = split_(command)[0]
+    lpApplicationName           = shlex.split(command)[0]
     lpCommandLine               = command
-    lpProcessAttributes         = None
-    lpThreadAttributes          = None
-    bInheritHandles             = False
     dwCreationFlags             = (
         CREATE_NEW_CONSOLE |
         NORMAL_PRIORITY_CLASS |
@@ -174,8 +176,7 @@ def execute(command, silentstart, start):
         CREATE_DEFAULT_ERROR_MODE |
         CREATE_UNICODE_ENVIRONMENT
     )
-    lpEnvironment               = None
-    lpCurrentDirectory          = dirname(lpApplicationName)
+    lpCurrentDirectory          = os.path.dirname(lpApplicationName)
     lpStartupInfo               = STARTUPINFOW(
         cb                      = sizeof(STARTUPINFOW),
         dwFlags                 = STARTF_USESHOWWINDOW,
@@ -187,16 +188,10 @@ def execute(command, silentstart, start):
     lpProcessInformation        = PROCESS_INFORMATION()
 
     assert CreateProcessW(
-        lpApplicationName,
-        lpCommandLine,
-        lpProcessAttributes,
-        lpThreadAttributes,
-        bInheritHandles,
-        dwCreationFlags,
-        lpEnvironment,
-        lpCurrentDirectory,
-        byref(lpStartupInfo),
-        byref(lpProcessInformation)
+        lpApplicationName, lpCommandLine,
+        None, None, False, dwCreationFlags,
+        None, lpCurrentDirectory,
+        byref(lpStartupInfo), byref(lpProcessInformation)
     ),  report("Failed to start emulator", exc=EmulatorLaunchFailedError)
 
     if start:
@@ -208,19 +203,49 @@ def execute(command, silentstart, start):
         close_handle(lpProcessInformation[:2])
         lpProcessInformation = None
 
-    hwnds = get_hwnds(lpProcessInformation[2])
-
     if start and silentstart:
-        refresh_thread = threading.Thread(target=refresh_window, args=(focusedwindow, hwnds))
+        hwnds = get_hwnds(lpProcessInformation[2])
+        refresh_thread = threading.Thread(target=refresh_window, name="Refresh-thread", args=(focusedwindow, hwnds))
         refresh_thread.start()
 
-    return lpProcessInformation, focusedwindow, hwnds
+    return lpProcessInformation, focusedwindow
+
+def execute_indirect(command, silentstart, start):
+    focusedwindow = get_focused_window()
+    try:
+        subprocess.run('powershell -Command "exit"', creationflags=CREATE_NO_WINDOW)
+        args = shlex.split(command)
+        directory, filename = os.path.split(args[0])
+        if start:
+            windowstyle = "Hidden" if silentstart else "Minimized"
+        else:
+            windowstyle = "Hidden"
+        script = (
+            f"powershell -Command \"Start-Process -FilePath {filename} "
+            f"-ArgumentList '{' '.join(args[1:])}' "
+            f"-WorkingDirectory '{directory}' "
+            f"-WindowStyle {windowstyle}\""
+        )
+    except Exception as e:
+        logger.warning(f"An Exception occurred: {e}")
+        script = f'cmd /c "{command}"'
+    logger.info(f"Execute: {script}")
+    subprocess.Popen(script, creationflags=CREATE_NO_WINDOW)
+    return None, focusedwindow
 
 def terminate_process(pid):
     with open_process(PROCESS_TERMINATE, pid) as hProcess:
         assert TerminateProcess(hProcess, 0), \
             report(f"Failed to terminate process: {pid}", level=30, r_exc=False)
     return True
+
+def terminate_process_tree(pid):
+    try:
+        for child in psutil.Process(pid).children(recursive=True):
+            child.terminate()
+        psutil.Process(pid).terminate()
+    except psutil.NoSuchProcess:
+        pass
 
 @retry
 def get_hwnds(pid):
@@ -303,7 +328,7 @@ def _get_process_creation_time(pid):
 def _get_thread_creation_time(tid):
     return __get_time(open_thread, GetThreadTimes, THREAD_QUERY_INFORMATION, tid, select=0)
 
-def get_thread(pid):
+def get_main_thread(pid):
     mainthreadid    = 0
     minstarttime    = MAXULONGLONG
     try:
@@ -322,8 +347,18 @@ def get_thread(pid):
         pass
     return mainthreadid
 
+def get_threads(pid):
+    threads = []
+    try:
+        for lpte32 in _enum_threads():
+            if lpte32.th32OwnerProcessID == pid:
+                threads.append(lpte32.th32ThreadID)
+    except IterationFinished:
+        pass
+    return threads
+
 def _get_process(pid):
-    tid = get_thread(pid)
+    tid = get_main_thread(pid)
     pi = PROCESS_INFORMATION(dwProcessId=pid, dwThreadId=tid)
     try:
         hProcess = OpenProcess(PROCESS_ALL_ACCESS, False, pid)
@@ -376,6 +411,7 @@ def switch_window(hwnds=None, arg=None):
     for hwnd in hwnds:
         if not GetWindow(hwnd, GW_CHILD):
             continue
+        ShowWindow(hwnd, SW_HIDE)
         ShowWindow(hwnd, arg)
     return True
 
@@ -391,6 +427,9 @@ def get_parent_pid(pid):
     except OSError:
         return -1
     return pbi.InheritedFromUniqueProcessId
+
+def get_child_processes(pid):
+    return [p for p in psutil.Process(pid).children()]
 
 def get_exit_code(pid):
     try:
@@ -428,8 +467,6 @@ def send_message_box(
     if style & MB_HELP == MB_HELP:
         if isinstance(helpid, int) and callable(callback):
             mbparams[7:9] = helpid, callback
-        else:
-            mbparams[8] = None
 
     if isinstance(p, int) and isinstance(s, int):
         mbparams.dwLanguageId = (s & 0xffff) << 10 | (p & 0xffff)
