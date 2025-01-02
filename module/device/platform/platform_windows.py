@@ -193,6 +193,18 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             if instance.MuMuPlayer12_id is None:
                 logger.warning(f'Cannot get MuMu instance index from name {instance.name}')
             self._stop(f'"{Emulator.single_to_console(exe)}" control -v {instance.MuMuPlayer12_id} restart')
+        elif instance == Emulator.LDPlayerFamily:
+            # ldconsole.exe reboot --index 0
+            self._stop(f'"{Emulator.single_to_console(exe)}" reboot --index {instance.LDPlayer_id}')
+        elif instance == Emulator.NoxPlayerFamily:
+            # NoxConsole.exe reboot --name:Nox_1
+            self._stop(f'"{Emulator.single_to_console(exe)}" reboot -name:{instance.name}')
+        elif instance == Emulator.BlueStacks4:
+            # bsconsole.exe reboot --name Android
+            self._stop(f'"{Emulator.single_to_console(exe)}" reboot --name {instance.name}')
+        elif instance == Emulator.MEmuPlayer:
+            # memuc.exe reboot -n MEmu_0
+            self._stop(f'"{Emulator.single_to_console(exe)}" reboot -n {instance.name}')
         else:
             raise EmulatorUnknown(f'Cannot restart an unknown emulator instance: {instance}')
 

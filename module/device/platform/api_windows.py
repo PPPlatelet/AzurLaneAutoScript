@@ -44,15 +44,17 @@ def retry(func):
                     init()
                 return func(*args, **kwargs)
             except WinApiBaseException as e:
-                exception = type(e)
+                exception = e
                 bind(lambda: None)
             except OSError as e:
-                exception = type(e)
+                exception = e
                 bind(lambda: None)
             except Exception as e:
-                exception = type(e)
+                exception = e
                 bind(lambda: None)
-        report(f"'{func.__name__}' failed", exc=exception)
+        if exception is not None:
+            logger.error(f"{func.__name__} failed: {exception}")
+            raise exception
     return wrapper
 
 def close_handle(handles: Iterable[Any], *args: Any, fclose: Callable[..., Any] = CloseHandle):

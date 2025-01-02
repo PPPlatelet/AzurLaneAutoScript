@@ -172,6 +172,8 @@ class Emulator(EmulatorBase):
             return exe.replace('LDPlayer.exe', 'ldconsole.exe')
         elif 'dnplayer.exe' in exe:
             return exe.replace('dnplayer.exe', 'ldconsole.exe')
+        elif 'Nox.exe' in exe:
+            return exe.replace('Nox.exe', 'NoxConsole.exe')
         elif 'Bluestacks.exe' in exe:
             return exe.replace('Bluestacks.exe', 'bsconsole.exe')
         elif 'MEmu.exe' in exe:

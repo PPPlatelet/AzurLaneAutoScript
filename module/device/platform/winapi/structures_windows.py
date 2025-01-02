@@ -1,10 +1,11 @@
 from re import search, fullmatch
+from typing import final
 
 from ctypes import \
     POINTER, Structure as _Structure, WINFUNCTYPE, _SimpleCData, _Pointer, _CFuncPtr, \
     c_int32, c_uint32, c_uint64, c_uint16, \
     c_wchar, c_wchar_p, c_void_p, c_ubyte, c_byte, c_long, c_ulong
-from ctypes.wintypes import MAX_PATH, FILETIME as _FILETIME
+from ctypes.wintypes import MAX_PATH, _FILETIME
 
 __all__ = [
     'WinApiBaseException', 'EmulatorLaunchFailedError', 'HwndNotFoundError', 'IterationFinished',
@@ -55,10 +56,12 @@ def _check_ptr(ptr):
         return False
 
 class Structure(_Structure):
+    @final
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         cls.field_name, cls.field_type = zip(*cls._fields_)
 
+    @final
     def __eq__(self, other: 'Structure'):
         if not isinstance(other, self.__class__):
             return NotImplemented
@@ -87,6 +90,7 @@ class Structure(_Structure):
                 return False # Not all elements match
         return True
 
+    @final
     def __bool__(self):
         for field_name, field_type in self._fields_:
             field_value = getattr(self, field_name)
@@ -109,6 +113,7 @@ class Structure(_Structure):
                 continue # Char array
         return False
 
+    @final
     def __setitem__(self, key, value):
         length = len(self)
         if isinstance(key, slice):
@@ -130,6 +135,7 @@ class Structure(_Structure):
         else:
             raise TypeError("Invalid argument type")
 
+    @final
     def __getitem__(self, item):
         length = len(self)
         if isinstance(item, slice):
@@ -193,7 +199,8 @@ class Structure(_Structure):
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
 
-# processthreadsapi.h line 28
+# Contains information about a newly created process and its primary thread.
+# Please read https://learn.microsoft.com/windows/win32/api/processthreadsapi/ns-processthreadsapi-process_information for more information.
 class PROCESS_INFORMATION(Structure):
     _fields_ = [
         ('hProcess',    c_void_p),
@@ -202,6 +209,8 @@ class PROCESS_INFORMATION(Structure):
         ('dwThreadId',  c_uint32)
     ]
 
+# Specifies the window station, desktop, standard handles, and appearance of the main window for a process at creation time.
+# Please read https://learn.microsoft.com/windows/win32/api/processthreadsapi/ns-processthreadsapi-startupinfow for more information.
 class STARTUPINFOW(Structure):
     _fields_ = [
         ("cb",              c_uint32),
@@ -224,7 +233,8 @@ class STARTUPINFOW(Structure):
         ("hStdError",       c_void_p)
     ]
 
-# minwinbase.h line 13
+# Contains the security descriptor for an object and specifies whether the handle retrieved by specifying this structure is inheritable.
+# Please read https://learn.microsoft.com/windows/win32/api/wtypesbase/ns-wtypesbase-security_attributes for more information.
 class SECURITY_ATTRIBUTES(Structure):
     _fields_ = [
         ("nLength",                 c_uint32),
@@ -232,7 +242,8 @@ class SECURITY_ATTRIBUTES(Structure):
         ("bInheritHandle",          c_int32)
     ]
 
-# tlhelp32.h line 62
+# Describes an entry from a list of the processes residing in the system address space when a snapshot was taken.
+# Please read https://learn.microsoft.com/windows/win32/api/tlhelp32/ns-tlhelp32-processentry32w for more information.
 class PROCESSENTRY32W(Structure):
     _fields_ = [
         ("dwSize",              c_ulong),
@@ -247,6 +258,8 @@ class PROCESSENTRY32W(Structure):
         ("szExeFile",           c_wchar * MAX_PATH)
     ]
 
+# Describes an entry from a list of the threads executing in the system when a snapshot was taken.
+# Please read https://learn.microsoft.com/windows/win32/api/tlhelp32/ns-tlhelp32-threadentry32 for more information.
 class THREADENTRY32(Structure):
     _fields_ = [
         ("dwSize",              c_ulong),
@@ -258,12 +271,16 @@ class THREADENTRY32(Structure):
         ("dwFlags",             c_ulong)
     ]
 
+# The POINT structure defines the x- and y-coordinates of a point.
+# Please read https://learn.microsoft.com/windows/win32/api/windef/ns-windef-point for more information.
 class POINT(Structure):
     _fields_ = [
         ("x", c_long),
         ("y", c_long)
     ]
 
+# The RECT structure defines a rectangle by the coordinates of its upper-left and lower-right corners.
+# Please read https://learn.microsoft.com/windows/win32/api/windef/ns-windef-rect for more information.
 class RECT(Structure):
     _fields_ = [
         ("left",    c_long),
@@ -272,7 +289,8 @@ class RECT(Structure):
         ("bottom",  c_long)
     ]
 
-# winuser.h line 1801
+# Contains information about the placement of a window on the screen.
+# Please read https://learn.microsoft.com/windows/win32/api/winuser/ns-winuser-windowplacement for more information.
 class WINDOWPLACEMENT(Structure):
     _fields_ = [
         ("length",              c_uint32),
@@ -284,7 +302,8 @@ class WINDOWPLACEMENT(Structure):
         ("rcDevice",            RECT)
     ]
 
-# winternl.h line 25
+# The UNICODE_STRING structure is used to define Unicode strings.
+# Please read https://learn.microsoft.com/windows/win32/api/ntdef/ns-ntdef-_unicode_string for more information.
 class UNICODE_STRING(Structure):
     _fields_ = [
         ("Length",          c_uint16),
@@ -292,7 +311,8 @@ class UNICODE_STRING(Structure):
         ("Buffer",          POINTER(c_wchar))
     ]
 
-# winternl.h line 54
+# Contains process parameter information.
+# Please read https://learn.microsoft.com/windows/win32/api/winternl/ns-winternl-rtl_user_process_parameters for more information.
 class RTL_USER_PROCESS_PARAMETERS(Structure):
     _fields_ = [
         ("Reserved",        c_byte * 96),
@@ -300,12 +320,15 @@ class RTL_USER_PROCESS_PARAMETERS(Structure):
         ("CommandLine",     UNICODE_STRING)
     ]
 
+# Contains process information.
+# Please read https://learn.microsoft.com/windows/win32/api/winuser/ns-winuser-windowplacement for more information.
 class PEB(Structure):
     _fields_ = [
         ("Reserved1",           c_byte * 32),
         ("ProcessParameters",   POINTER(RTL_USER_PROCESS_PARAMETERS)),
     ]
 
+# Please read https://learn.microsoft.com/windows/win32/api/winternl/nf-winternl-ntqueryinformationprocess for more information.
 class PROCESS_BASIC_INFORMATION(Structure):
     _fields_ = [
         ("ExitStatus",                      c_int32),
@@ -316,10 +339,14 @@ class PROCESS_BASIC_INFORMATION(Structure):
         ("InheritedFromUniqueProcessId",    c_uint64),
     ]
 
+# Contains a 64-bit value representing the number of 100-nanosecond intervals since January 1, 1601 (UTC).
+# Please read https://learn.microsoft.com/windows/win32/api/minwinbase/ns-minwinbase-filetime for more information.
 class FILETIME(Structure, _FILETIME):
     def to_int(self):
         return (self.dwHighDateTime << 32) + self.dwLowDateTime
 
+# Contains timing information for a process or thread.
+# There's no official documentation for this structure. It's just a Personal definition. :)
 class TIMEINFO(Structure):
     _fields_ = [
         ("CreationTime",    FILETIME),
@@ -328,6 +355,8 @@ class TIMEINFO(Structure):
         ("UserTime",        FILETIME)
     ]
 
+# Contains information about an item for which context-sensitive help has been requested.
+# Please read https://learn.microsoft.com/windows/win32/api/winuser/ns-winuser-helpinfo for more information.
 class HELPINFO(Structure):
     _fields_ = [
         ("cbSize",          c_uint32),
@@ -341,6 +370,8 @@ class HELPINFO(Structure):
 LPHELPINFO = POINTER(HELPINFO)
 MSGBOXCALLBACK = WINFUNCTYPE(None, LPHELPINFO)
 
+# Contains information used to display a message box. The MessageBoxIndirect function uses this structure.
+# Please read https://learn.microsoft.com/windows/win32/api/winuser/ns-winuser-msgboxparamsw for more information.
 class MSGBOXPARAMSW(Structure):
     _fields_ = [
         ("cbSize",              c_uint32),
