@@ -1,5 +1,5 @@
 from re import search, fullmatch
-from typing import final
+from typing import Optional, Union
 
 from ctypes import \
     POINTER, Structure as _Structure, WINFUNCTYPE, _SimpleCData, _Pointer, _CFuncPtr, \
@@ -21,17 +21,17 @@ class EmulatorLaunchFailedError(WinApiBaseException): ...
 class HwndNotFoundError(WinApiBaseException): ...
 class IterationFinished(WinApiBaseException): ...
 
-def _retrieve_contents(value):
+def _retrieve_contents(value: _Pointer) -> Optional[Union[_SimpleCData, 'Structure']]:
     try:
         return value.contents # Pointer to a Structure or a simple CData type
     except ValueError:
         return # NULL pointer
 
-def _cmp_objs(obj_a, obj_b, *cmp_types):
+def _cmp_objs(obj_a: object, obj_b: object, *cmp_types: type) -> bool:
     # Compare two objects of different types
-    return any(isinstance(obj_a, types) and isinstance(obj_b, types) and obj_a == obj_b for types in cmp_types)
+    return any(isinstance(obj_a, t) and isinstance(obj_b, t) and obj_a == obj_b for t in cmp_types)
 
-def _cmp_ptrs(ptr_a, ptr_b):
+def _cmp_ptrs(ptr_a: _Pointer, ptr_b: _Pointer) -> bool:
     contents_a, contents_b = _retrieve_contents(ptr_a), _retrieve_contents(ptr_b)
 
     if contents_a is contents_b is None:
@@ -42,26 +42,29 @@ def _cmp_ptrs(ptr_a, ptr_b):
         return contents_a.value == contents_b.value # Assuming it's a simple CData type
     return contents_a == contents_b # Assuming it's a Structure, Recursive call Structure.__eq__
 
-def _check_object(value, *valid_types):
-    if isinstance(value, str):
+def _check_object(value: object, *valid_types: type) -> bool:
+    if str in valid_types and isinstance(value, str):
         return value not in ('', '\x00')
     return isinstance(value, valid_types) and bool(value)
 
-def _check_ptr(ptr):
+def _check_ptr(ptr: _Pointer) -> bool:
     try:
-        return bool(ptr.contents.value)
+        return bool(ptr.contents.value) # Simple CData type
     except AttributeError:
-        return bool(ptr.contents)
+        return bool(ptr.contents) # Structure
     except ValueError:
-        return False
+        return False # NULL pointer
 
 class Structure(_Structure):
-    @final
+    def __new__(cls, *args, **kwargs):
+        if cls is Structure:
+            raise TypeError("Cannot instantiate abstract class 'Structure'")
+        return super().__new__(cls, *args, **kwargs)
+
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         cls.field_name, cls.field_type = zip(*cls._fields_)
 
-    @final
     def __eq__(self, other: 'Structure'):
         if not isinstance(other, self.__class__):
             return NotImplemented
@@ -73,7 +76,7 @@ class Structure(_Structure):
             elif self_value is other_value is None:
                 continue # Both c_void_p
             elif self_value is None or other_value is None:
-                return False # Two c_void_p pointers, one is NULL and the other is not
+                return False # Two c_void_p pointers, one is NULL and the another is not
             elif (isinstance(self_value, _Pointer) and
                   isinstance(other_value, _Pointer) and
                   _cmp_ptrs(self_value, other_value)):
@@ -90,7 +93,6 @@ class Structure(_Structure):
                 return False # Not all elements match
         return True
 
-    @final
     def __bool__(self):
         for field_name, field_type in self._fields_:
             field_value = getattr(self, field_name)
@@ -107,13 +109,12 @@ class Structure(_Structure):
             if match is None:
                 continue # Not an array, assume False
             try:
-                if any(field_value[i] for i in range(int(match.group(1)))):
+                if any(bool(field_value[i]) for i in range(int(match.group(1)))):
                     return True # At least one element is True
             except IndexError:
                 continue # Char array
         return False
 
-    @final
     def __setitem__(self, key, value):
         length = len(self)
         if isinstance(key, slice):
@@ -135,7 +136,6 @@ class Structure(_Structure):
         else:
             raise TypeError("Invalid argument type")
 
-    @final
     def __getitem__(self, item):
         length = len(self)
         if isinstance(item, slice):
@@ -173,9 +173,6 @@ class Structure(_Structure):
 
     def __len__(self):
         return len(self.field_name)
-
-    def __dir__(self):
-        return [attr for attr in super().__dir__() if not attr.startswith('_')]
 
     def __repr__(self):
         field_values = ', '.join(f"{name}={getattr(self, name)!r}" for name in self.field_name)
@@ -346,7 +343,7 @@ class FILETIME(Structure, _FILETIME):
         return (self.dwHighDateTime << 32) + self.dwLowDateTime
 
 # Contains timing information for a process or thread.
-# There's no official documentation for this structure. It's just a Personal definition. :)
+# There's no official documentation for this structure. It's just a personal definition. :)
 class TIMEINFO(Structure):
     _fields_ = [
         ("CreationTime",    FILETIME),

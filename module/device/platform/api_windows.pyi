@@ -1,7 +1,7 @@
-from typing import Any, Callable, Generator, Iterable, List, NewType, Optional, Tuple, Union # type: ignore
+from typing import Any, Callable, Iterable, List, NewType, Optional, Tuple, Union
 
 from ctypes import POINTER
-from ctypes.wintypes import HANDLE, HWND # type: ignore
+from ctypes.wintypes import HANDLE, HWND
 
 from module.device.platform.emulator_windows import EmulatorInstance
 from module.device.platform.winapi import *
@@ -28,7 +28,7 @@ def __yield_entries(
         entry32:    Union[PROCESSENTRY32W, THREADENTRY32],
         snapshot:   HANDLE,
         func:       Callable[[HANDLE, Union[LPPROCESSENTRY32W, LPTHREADENTRY32]], bool]
-) -> Generator[Union[PROCESSENTRY32W, THREADENTRY32], None, None]:
+) -> Iterable[Union[PROCESSENTRY32W, THREADENTRY32]]:
     """
     Generates a loop that yields entries from a snapshot until the function fails or finishes.
 
@@ -46,7 +46,7 @@ def __yield_entries(
     """
     pass
 
-def _enum_processes() -> Generator[PROCESSENTRY32W, None, None]:
+def _enum_processes() -> Iterable[PROCESSENTRY32W]:
     """
     Enumerates all the processes currently running on the system.
 
@@ -59,7 +59,7 @@ def _enum_processes() -> Generator[PROCESSENTRY32W, None, None]:
     """
     pass
 
-def _enum_threads() -> Generator[THREADENTRY32, None, None]:
+def _enum_threads() -> Iterable[THREADENTRY32]:
     """
     Enumerates all the threads currently running on the system.
 
@@ -128,7 +128,7 @@ def execute_direct(
         start (bool): True if start emulator, False if not.
 
     Examples:
-        >>> print(execute('"E:/Program Files/Netease/MuMu Player 12/shell/MuMuPlayer.exe" -v 1', False, True))
+        >>> print(execute_direct('"E:/Program Files/Netease/MuMu Player 12/shell/MuMuPlayer.exe" -v 1', False, True))
         -> 'PROCESS_INFORMATION(1, 2, 3, 4), (114514, WINDOWPLACEMENT(1, 2, 3, POINT(1, 2), POINT(1, 2), RECT(1, 2, 3, 4)))'
 
     Returns:
@@ -153,7 +153,7 @@ def execute_indirect(
         start (bool): True if start emulator, False if not.
 
     Examples:
-        >>> print(execute('"E:/Program Files/Netease/MuMu Player 12/shell/MuMuPlayer.exe" -v 1', False, True))
+        >>> print(execute_indirect('"E:/Program Files/Netease/MuMu Player 12/shell/MuMuPlayer.exe" -v 1', False, True))
         -> 'None, (c_void_p(114514), WINDOWPLACEMENT(1, 2, 3, POINT(1, 2), POINT(1, 2), RECT(1, 2, 3, 4)))'
 
     Returns:

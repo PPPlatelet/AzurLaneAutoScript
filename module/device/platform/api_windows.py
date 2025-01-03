@@ -21,7 +21,7 @@ __all__ = [
     'get_focused_window', 'set_focus_to_window', 'refresh_window',
     'execute_direct', 'execute_indirect', 'terminate_process', 'get_hwnds', 'get_cmdline',
     'kill_process_by_regex', '__get_time', '_get_process_creation_time',
-    '_get_thread_creation_time', 'get_thread', '_get_process', 'get_process',
+    '_get_thread_creation_time', 'get_main_thread', 'get_threads', '_get_process', 'get_process',
     'switch_window', 'get_parent_pid', 'get_exit_code', 'is_running',
     'send_message_box'
 ]
