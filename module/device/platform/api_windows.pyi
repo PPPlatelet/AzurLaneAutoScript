@@ -118,7 +118,7 @@ def execute_direct(
         command: str,
         silentstart: bool,
         start: bool
-) -> Tuple[Optional[PROCESS_INFORMATION], Tuple[HWND, Optional[WINDOWPLACEMENT]], List[HWND]]:
+) -> Tuple[PROCESS_INFORMATION, Tuple[HWND, Optional[WINDOWPLACEMENT]], List[HWND]]:
     """
     Create a new process.
 
@@ -132,7 +132,7 @@ def execute_direct(
         -> 'PROCESS_INFORMATION(1, 2, 3, 4), (114514, WINDOWPLACEMENT(1, 2, 3, POINT(1, 2), POINT(1, 2), RECT(1, 2, 3, 4)))'
 
     Returns:
-        tuple (PROCESS_INFORMATION | None, tuple(HWND, WINDOWPLACEMENT)): Process information, focused window information.
+        tuple (PROCESS_INFORMATION, tuple(HWND, WINDOWPLACEMENT)): Process information, focused window information.
 
     Raises:
         EmulatorLaunchFailedError: If CreateProcessW failed.

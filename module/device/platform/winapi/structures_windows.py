@@ -318,7 +318,7 @@ class RTL_USER_PROCESS_PARAMETERS(Structure):
     ]
 
 # Contains process information.
-# Please read https://learn.microsoft.com/windows/win32/api/winuser/ns-winuser-windowplacement for more information.
+# Please read https://learn.microsoft.com/windows/win32/api/winternl/ns-winternl-peb for more information.
 class PEB(Structure):
     _fields_ = [
         ("Reserved1",           c_byte * 32),

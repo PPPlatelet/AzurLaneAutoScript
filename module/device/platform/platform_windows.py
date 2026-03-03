@@ -42,17 +42,28 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
         silentstart = False if self.config.Emulator_SilentStart == 'normal' else True
 
+        if self.process is not None:
+            pid: int = self.process[2]
+        else:
+            pid = 0
+
         if isinstance(self.process, PROCESS_INFORMATION) and all(self.process[:2]):
             logger.info(f"Close expired handles")
             api_windows.close_handle(self.process[:2])
             self.process = None
 
         self.hwnds = []
+
         if start:
             # The purpose of creating process indirectly is to avoid some unnecessary troubles.
             self.process, self.focusedwindow = api_windows.execute_indirect(command, silentstart, start)
         else:
             self.process, self.focusedwindow = api_windows.execute_direct(command, silentstart, start)
+            if pid and api_windows.is_running(pid):
+                api_windows.terminate_process_tree(pid)
+            logger.info("Close useless handles")
+            api_windows.close_handle(self.process[:2])
+            self.process = None
 
         return True
 

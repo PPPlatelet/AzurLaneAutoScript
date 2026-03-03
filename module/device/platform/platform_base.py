@@ -65,6 +65,16 @@ class PlatformBase(Connection, EmulatorManagerBase):
         skip_stop()
         return True
 
+    def emulator_restart(self):
+        """
+        Restart an emulator.
+        """
+        @run_once
+        def skip_restart():
+            logger.info(f'Current platform {sys.platform} does not support emulator_restart, skip')
+        skip_restart()
+        return True
+
     def emulator_check(self):
         """
         Check if emulator is running.

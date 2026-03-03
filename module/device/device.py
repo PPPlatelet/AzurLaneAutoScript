@@ -343,3 +343,27 @@ class Device(Screenshot, Control, AppControl):
             raise
         self.stuck_record_clear()
         self.click_record_clear()
+
+    def emulator_restart(self):
+        # restart emulator
+        if self.emulator_instance is not None:
+            super().emulator_restart()
+        else:
+            logger.critical(
+                f'No emulator with serial "{self.config.Emulator_Serial}" found, '
+                f'please set a correct serial'
+            )
+            raise
+        self.stuck_record_clear()
+        self.click_record_clear()
+
+    def emulator_check(self):
+        # Check if emulator is running
+        if self.emulator_instance is not None:
+            return super().emulator_check()
+        else:
+            logger.critical(
+                f'No emulator with serial "{self.config.Emulator_Serial}" found, '
+                f'please set a correct serial'
+            )
+            raise

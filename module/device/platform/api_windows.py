@@ -4,6 +4,7 @@ import shlex
 import os
 import threading
 from functools import wraps
+import collections
 
 from ctypes import addressof, byref, create_unicode_buffer, sizeof, wstring_at
 from ctypes.wintypes import HWND, LPARAM, DWORD, ULONG
@@ -118,8 +119,11 @@ def get_focused_window():
             return wp
         report("Faled to get windowplacement", level=30)
 
-    hwnd = getwindow()
-    wp = getplacement(hwnd)
+    try:
+        hwnd = getwindow()
+        wp = getplacement(hwnd)
+    except OSError:
+        return None, None
 
     return hwnd, wp
 
@@ -173,8 +177,6 @@ def execute_direct(command, silentstart, start):
     lpCommandLine               = command
     dwCreationFlags             = (
         CREATE_NEW_CONSOLE |
-        NORMAL_PRIORITY_CLASS |
-        CREATE_NEW_PROCESS_GROUP |
         CREATE_DEFAULT_ERROR_MODE |
         CREATE_UNICODE_ENVIRONMENT
     )
@@ -200,15 +202,11 @@ def execute_direct(command, silentstart, start):
         wait = WaitForInputIdle(lpProcessInformation[0], INFINITE)
         assert wait == 0, \
             report("Failed to start emulator", exc=EmulatorLaunchFailedError)
-    else:
-        logger.info(f"Close useless handles")
-        close_handle(lpProcessInformation[:2])
-        lpProcessInformation = None
-
-    if start and silentstart:
-        hwnds = get_hwnds(lpProcessInformation[2])
-        refresh_thread = threading.Thread(target=refresh_window, name="Refresh-thread", args=(focusedwindow, hwnds))
-        refresh_thread.start()
+        
+        if silentstart:
+            hwnds = get_hwnds(lpProcessInformation[2])
+            refresh_thread = threading.Thread(target=refresh_window, name="Refresh-thread", args=(focusedwindow, hwnds))
+            refresh_thread.start()
 
     return lpProcessInformation, focusedwindow
 
@@ -232,7 +230,9 @@ def execute_indirect(command, silentstart, start):
         logger.warning(f"An Exception occurred: {e}")
         script = f'cmd /c "{command}"'
     logger.info(f"Execute: {script}")
-    subprocess.Popen(script, creationflags=CREATE_NO_WINDOW)
+    proc = subprocess.Popen(script, creationflags=CREATE_NO_WINDOW)
+    proc.wait()
+
     return None, focusedwindow
 
 def terminate_process(pid):
@@ -258,7 +258,7 @@ def get_hwnds(pid):
     def callback(hwnd: int, lparam: LPARAM):  # DO NOT DELETE THIS PARAMETER!!!
         processid = DWORD()
         GetWindowThreadProcessId(hwnd, byref(processid))
-        if processid.value == pid:
+        if processid.value == pid and GetWindow(hwnd, GW_CHILD):
             hwnds.append(HWND(hwnd))
         return True
 
@@ -310,7 +310,7 @@ def kill_process_by_regex(regex):
             if not re.search(regex, cmdline):
                 continue
 
-            logger.info(f'Kill emulator: {cmdline}')
+            logger.info(f'Kill process: {cmdline}')
             terminate_process(pid)
             count += 1
     except IterationFinished:
@@ -430,8 +430,8 @@ def get_parent_pid(pid):
         return -1
     return pbi.InheritedFromUniqueProcessId
 
-def get_child_processes(pid):
-    return [p for p in psutil.Process(pid).children()]
+def get_child_processes(pid, recursive: bool = False):
+    return [child.pid for child in psutil.Process(pid).children(recursive)]
 
 def get_exit_code(pid):
     try:
@@ -443,12 +443,11 @@ def get_exit_code(pid):
         return -1
     return exit_code.value
 
-def is_running(pid=0, ppid=0):
-    if pid and get_exit_code(pid) != STILL_ACTIVE:
+def is_running(pid):
+    try:
+        return psutil.Process(pid).is_running()
+    except psutil.NoSuchProcess:
         return False
-    if ppid and ppid != get_parent_pid(pid):
-        return False
-    return True
 
 def send_message_box(
         text='Hello World!', caption='ALAS Message Box', style=None,
